@@ -415,6 +415,7 @@
   .gist-step-desc { font-size: 12px; color: var(--text3); line-height: 1.5; }
   .token-input { font-family: var(--font-mono, monospace); font-size: 12px; letter-spacing: 0.03em; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js" defer></script>
 </head>
 <body>
 <div class="app">
@@ -451,6 +452,9 @@
       <span class="nav-icon">🏦</span> Ahorro & Inversión
     </div>
     <div class="nav-section">Herramientas</div>
+    <div class="nav-item" onclick="showPanel('alertas-config')">
+      <span class="nav-icon">🔔</span> Alertas
+    </div>
     <div class="nav-item" onclick="showPanel('nube')">
       <span class="nav-icon">☁️</span> Nube / Sync
     </div>
@@ -563,6 +567,78 @@
         <div class="card">
           <div class="card-title">Gastos este mes</div>
           <div id="dash-gastos-list"><div class="empty"><div class="empty-text">Sin gastos este mes</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ALERTAS -->
+    <div class="panel" id="panel-alertas-config">
+      <div class="section-header">
+        <div class="section-title">🔔 Alertas de vencimiento</div>
+      </div>
+
+      <!-- Estado notificaciones navegador -->
+      <div class="grid2" style="margin-bottom:20px">
+        <div class="card">
+          <div class="card-title">Notificaciones del navegador</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:14px">Recibe alertas en tu pantalla aunque la app no esté abierta (Windows, Android, Mac).</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span class="sync-dot off" id="notif-dot"></span>
+            <span id="notif-status-text" style="font-size:13px;color:var(--text2)">Sin activar</span>
+          </div>
+          <button class="btn btn-primary" id="btn-activar-notif" onclick="activarNotificaciones()">🔔 Activar notificaciones</button>
+          <div style="margin-top:14px">
+            <label class="form-label">Hora de alerta diaria</label>
+            <input type="time" id="notif-hora" value="08:00" style="width:130px" onchange="guardarConfigAlertas()">
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">Revisa vencimientos cada día a esta hora</div>
+          </div>
+          <div style="margin-top:14px">
+            <label class="form-label">Avisar con cuántos días de anticipación</label>
+            <select id="notif-dias" onchange="guardarConfigAlertas()">
+              <option value="1">1 día antes</option>
+              <option value="3" selected>3 días antes</option>
+              <option value="5">5 días antes</option>
+              <option value="7">7 días antes</option>
+              <option value="15">15 días antes</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Alertas por email (EmailJS)</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:14px">Recibe un email cuando un gasto esté próximo a vencer. Configura tus credenciales de EmailJS.</div>
+          <div class="form-group">
+            <label class="form-label">Email destino *</label>
+            <input type="email" id="ejs-email" placeholder="tu@gmail.com" oninput="guardarConfigAlertas()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tu nombre</label>
+            <input type="text" id="ejs-nombre" placeholder="German" oninput="guardarConfigAlertas()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Service ID</label>
+            <input type="text" id="ejs-service" placeholder="service_xxxxxxx" oninput="guardarConfigAlertas()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Template ID</label>
+            <input type="text" id="ejs-template" placeholder="template_xxxxxxx" oninput="guardarConfigAlertas()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Public Key</label>
+            <input type="text" id="ejs-pubkey" placeholder="xxxxxxxxxxxxxxxx" oninput="guardarConfigAlertas()">
+          </div>
+          <button class="btn btn-primary" onclick="probarEmail()">📧 Enviar email de prueba</button>
+          <div id="ejs-feedback" style="margin-top:10px;font-size:12px;display:none"></div>
+        </div>
+      </div>
+
+      <!-- Vencimientos próximos -->
+      <div class="card">
+        <div class="card-title">Vencimientos próximos</div>
+        <div id="lista-vencimientos-panel"></div>
+        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="enviarAlertasAhora()">📧 Enviar alertas ahora</button>
+          <button class="btn btn-ghost" onclick="verificarVencimientosNotif()">🔔 Notificar ahora</button>
         </div>
       </div>
     </div>
@@ -728,6 +804,7 @@
                 <th>Categoría</th>
                 <th>Tipo</th>
                 <th>Monto</th>
+                <th>Vencimiento</th>
                 <th>Notas</th>
                 <th>Acciones</th>
               </tr>
@@ -1046,9 +1123,15 @@
       <label class="form-label">Monto ($) *</label>
       <input type="number" id="gas-monto" placeholder="0.00" min="0" step="0.01">
     </div>
-    <div class="form-group">
-      <label class="form-label">Notas</label>
-      <input type="text" id="gas-notas" placeholder="Descripción opcional">
+    <div class="form-row cols2">
+      <div class="form-group">
+        <label class="form-label">Notas</label>
+        <input type="text" id="gas-notas" placeholder="Descripción opcional">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha de vencimiento <span style="color:var(--text3)">(opcional)</span></label>
+        <input type="date" id="gas-vencimiento">
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-gasto')">Cancelar</button>
@@ -1674,7 +1757,7 @@ function loadState() {
 // NAVEGACIÓN
 // ============================
 const PANEL_TITLES = {
-  dashboard: 'Dashboard', nube: 'Nube — Sync', ingresos: 'Ingresos', gastos: 'Gastos',
+  dashboard: 'Dashboard', 'alertas-config': '🔔 Alertas de vencimiento', nube: 'Nube — Sync', ingresos: 'Ingresos', gastos: 'Gastos',
   deudas: 'Deudas & Créditos', simulador: 'Simulador de Metas', proyecciones: 'Proyecciones', ahorro: 'Ahorro & Inversión'
 };
 
@@ -1691,11 +1774,12 @@ function showPanel(name) {
   const addBtnLabels = { dashboard: '+ Agregar', ingresos: '+ Ingreso', gastos: '+ Gasto', deudas: '+ Deuda', simulador: '+ Simulación', proyecciones: '', ahorro: '+ Meta' };
   const btn = document.getElementById('topbar-add-btn');
   btn.textContent = addBtnLabels[name] || '+ Agregar';
-  btn.style.display = (name === 'proyecciones' || name === 'nube') ? 'none' : '';
+  btn.style.display = (name === 'proyecciones' || name === 'nube' || name === 'alertas-config') ? 'none' : '';
   if (name === 'deudas') renderDeudas();
   if (name === 'ingresos') renderIngresos();
   if (name === 'gastos') renderGastos();
   if (name === 'nube') loadNubePanel();
+  if (name === 'alertas-config') loadAlertasPanel();
   if (name === 'dashboard') renderDashboard();
   if (name === 'proyecciones') updateProjections();
   if (name === 'ahorro') renderMetasAhorro();
@@ -2010,7 +2094,7 @@ function renderIngresos() {
 // GASTOS CRUD
 // ============================
 function clearGasto() {
-  ['gas-nombre','gas-notas','gas-monto'].forEach(id => document.getElementById(id).value = '');
+  ['gas-nombre','gas-notas','gas-monto','gas-vencimiento'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('gas-categoria').value = 'vivienda';
   document.getElementById('gas-tipo').value = 'fijo';
   document.getElementById('gas-edit-id').value = '';
@@ -2029,7 +2113,8 @@ function saveGasto() {
     monto,
     mes: gasMesKey,
     fecha: gasMesKey,
-    notas: document.getElementById('gas-notas').value
+    notas: document.getElementById('gas-notas').value,
+    vencimiento: document.getElementById('gas-vencimiento').value || ''
   };
 
   const editId = document.getElementById('gas-edit-id').value;
@@ -2056,6 +2141,7 @@ function editGasto(id) {
   document.getElementById('gas-tipo').value = g.tipo;
   document.getElementById('gas-monto').value = g.monto;
   document.getElementById('gas-notas').value = g.notas || '';
+  document.getElementById('gas-vencimiento').value = g.vencimiento || '';
   openModal('modal-gasto');
 }
 
@@ -2063,6 +2149,22 @@ function deleteGasto(id) {
   if (!confirm('¿Eliminar este gasto?')) return;
   state.gastos = state.gastos.filter(g => g.id !== id);
   saveState(); renderGastos();
+}
+
+// ============================
+// VENCIMIENTOS
+// ============================
+function vencimientoInfo(vencimiento) {
+  if (!vencimiento) return null;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const venc = new Date(vencimiento + 'T00:00:00');
+  const dias = Math.round((venc - hoy) / (1000*60*60*24));
+  if (dias < 0)  return { texto: `Venció hace ${Math.abs(dias)}d`, color: 'var(--red)',   icon: '🔴', urgente: true };
+  if (dias === 0) return { texto: 'Vence HOY',                      color: 'var(--red)',   icon: '🚨', urgente: true };
+  if (dias <= 3)  return { texto: `Vence en ${dias}d`,              color: 'var(--red)',   icon: '⚠️', urgente: true };
+  if (dias <= 7)  return { texto: `Vence en ${dias}d`,              color: 'var(--amber)', icon: '🟡', urgente: false };
+  if (dias <= 15) return { texto: `Vence en ${dias}d`,              color: 'var(--teal)',  icon: '🔵', urgente: false };
+  return           { texto: `Vence ${venc.toLocaleDateString('es-CO',{day:'2-digit',month:'short'})}`, color: 'var(--text3)', icon: '📅', urgente: false };
 }
 
 // ============================
@@ -2188,17 +2290,26 @@ function renderGastos() {
     return;
   }
 
-  tbody.innerHTML = lista.map(g => `<tr>
-    <td><strong style="color:var(--text)">${g.nombre}</strong></td>
-    <td>${CAT_LABELS[g.categoria]||g.categoria}</td>
-    <td><span class="badge ${tipoBadge[g.tipo]||'badge-gray'}">${g.tipo}</span></td>
-    <td class="neg">-${fmt(parseFloat(g.monto)||0)}</td>
-    <td style="color:var(--text3);font-size:12px">${g.notas||'—'}</td>
-    <td>
-      <button class="btn btn-ghost btn-sm" onclick="editGasto('${g.id}')">✏️</button>
-      <button class="btn btn-danger btn-sm" onclick="deleteGasto('${g.id}')">🗑</button>
-    </td>
-  </tr>`).join('');
+  tbody.innerHTML = lista.map(g => {
+    const vInfo = vencimientoInfo(g.vencimiento);
+    const rowStyle = vInfo?.urgente ? 'background:rgba(255,107,107,0.04)' : '';
+    return `<tr style="${rowStyle}">
+      <td><strong style="color:var(--text)">${g.nombre}</strong></td>
+      <td>${CAT_LABELS[g.categoria]||g.categoria}</td>
+      <td><span class="badge ${tipoBadge[g.tipo]||'badge-gray'}">${g.tipo}</span></td>
+      <td class="neg">-${fmt(parseFloat(g.monto)||0)}</td>
+      <td style="font-size:12px">
+        ${vInfo
+          ? `<span style="color:${vInfo.color};font-weight:500">${vInfo.icon} ${vInfo.texto}</span>`
+          : '<span style="color:var(--text3)">—</span>'}
+      </td>
+      <td style="color:var(--text3);font-size:12px">${g.notas||'—'}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="editGasto('${g.id}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteGasto('${g.id}')">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
 
   const total = lista.reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
   const fijos = lista.filter(g => g.tipo==='fijo').reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
@@ -3037,6 +3148,30 @@ function renderAlertas() {
     alertas.push({ type: 'warning', msg: `Tienes ${cuotasPendientes.length} cuota(s) de deuda sin registrar este mes — ${fmt(totalCuotas)} en total. Ve a Deudas & Créditos para registrarlas.` });
   }
 
+  // Alert for upcoming vencimientos
+  const vencHoy = new Date(); vencHoy.setHours(0,0,0,0);
+  const proximosVenc = state.gastos.filter(g => {
+    if (!g.vencimiento) return false;
+    const v = new Date(g.vencimiento + 'T00:00:00');
+    const dias = Math.round((v - vencHoy) / (1000*60*60*24));
+    return dias >= 0 && dias <= 7;
+  });
+  if (proximosVenc.length > 0) {
+    proximosVenc.forEach(g => {
+      const vInfo = vencimientoInfo(g.vencimiento);
+      alertas.push({ type: vInfo.urgente ? 'danger' : 'warning', msg: `${vInfo.icon} ${g.nombre}: ${vInfo.texto} · ${fmt(g.monto)}` });
+    });
+  }
+  // Alert for past-due
+  const vencidos = state.gastos.filter(g => {
+    if (!g.vencimiento) return false;
+    const v = new Date(g.vencimiento + 'T00:00:00');
+    return v < vencHoy;
+  });
+  if (vencidos.length > 0) {
+    alertas.push({ type: 'danger', msg: `🔴 Tienes ${vencidos.length} gasto(s) vencido(s): ${vencidos.map(g=>g.nombre).join(', ')}` });
+  }
+
   // Alert si alguna simulación tiene impacto > 40% del balance disponible
   const simActivas = (state.simulaciones || []).filter(s => s.tipo === 'credito' || s.tipo === 'cuota' || s.tipo === 'mixto');
   const totalCuotaSim = simActivas.reduce((a, s) => a + (s.resultado?.cuotaMensual || 0), 0);
@@ -3544,6 +3679,275 @@ function renderMetasAhorro() {
 }
 
 // ============================
+// ALERTAS DE VENCIMIENTO
+// ============================
+const EMAILJS_SERVICE  = 'service_0g5onnd';
+const EMAILJS_TEMPLATE = 'template_99q209n';
+const EMAILJS_PUBKEY   = 'jCF4u384pp0Ix10Ty';
+const ALERTAS_CONFIG_KEY = 'finanzaspro_alertas_config';
+
+let alertasConfig = {
+  email: '', nombre: '', hora: '08:00', dias: 3,
+  ejsService: EMAILJS_SERVICE, ejsTemplate: EMAILJS_TEMPLATE, ejsPubkey: EMAILJS_PUBKEY,
+  notifActivas: false, emailActivo: false
+};
+
+function loadAlertasConfig() {
+  try {
+    const saved = localStorage.getItem(ALERTAS_CONFIG_KEY);
+    if (saved) alertasConfig = { ...alertasConfig, ...JSON.parse(saved) };
+  } catch(e) {}
+}
+
+function guardarConfigAlertas() {
+  alertasConfig.email      = document.getElementById('ejs-email')?.value?.trim() || alertasConfig.email;
+  alertasConfig.nombre     = document.getElementById('ejs-nombre')?.value?.trim() || alertasConfig.nombre;
+  alertasConfig.hora       = document.getElementById('notif-hora')?.value || alertasConfig.hora;
+  alertasConfig.dias       = parseInt(document.getElementById('notif-dias')?.value) || alertasConfig.dias;
+  alertasConfig.ejsService  = document.getElementById('ejs-service')?.value?.trim() || alertasConfig.ejsService;
+  alertasConfig.ejsTemplate = document.getElementById('ejs-template')?.value?.trim() || alertasConfig.ejsTemplate;
+  alertasConfig.ejsPubkey   = document.getElementById('ejs-pubkey')?.value?.trim() || alertasConfig.ejsPubkey;
+  try { localStorage.setItem(ALERTAS_CONFIG_KEY, JSON.stringify(alertasConfig)); } catch(e) {}
+}
+
+function loadAlertasPanel() {
+  loadAlertasConfig();
+  // Fill form
+  const fields = { 'ejs-email': alertasConfig.email, 'ejs-nombre': alertasConfig.nombre,
+    'notif-hora': alertasConfig.hora, 'ejs-service': alertasConfig.ejsService,
+    'ejs-template': alertasConfig.ejsTemplate, 'ejs-pubkey': alertasConfig.ejsPubkey };
+  Object.entries(fields).forEach(([id, val]) => { const el = document.getElementById(id); if (el) el.value = val || ''; });
+  const diasEl = document.getElementById('notif-dias');
+  if (diasEl) diasEl.value = alertasConfig.dias || 3;
+  // Notif status
+  actualizarEstadoNotif();
+  // Lista vencimientos
+  renderListaVencimientosPanel();
+  // Programar revisión diaria
+  programarRevisionDiaria();
+}
+
+function actualizarEstadoNotif() {
+  const dot  = document.getElementById('notif-dot');
+  const text = document.getElementById('notif-status-text');
+  const btn  = document.getElementById('btn-activar-notif');
+  if (!('Notification' in window)) {
+    if (dot) dot.className = 'sync-dot error';
+    if (text) text.textContent = 'No soportado en este navegador';
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    if (dot) dot.className = 'sync-dot ok';
+    if (text) text.textContent = '✓ Notificaciones activadas';
+    if (btn) { btn.textContent = '✓ Activadas'; btn.disabled = true; btn.style.opacity = '.6'; }
+    alertasConfig.notifActivas = true;
+  } else if (Notification.permission === 'denied') {
+    if (dot) dot.className = 'sync-dot error';
+    if (text) text.textContent = 'Bloqueadas — habilítalas en ajustes del navegador';
+    if (btn) btn.style.display = 'none';
+  } else {
+    if (dot) dot.className = 'sync-dot off';
+    if (text) text.textContent = 'Sin activar';
+  }
+}
+
+async function activarNotificaciones() {
+  if (!('Notification' in window)) { alert('Tu navegador no soporta notificaciones'); return; }
+  const perm = await Notification.requestPermission();
+  alertasConfig.notifActivas = perm === 'granted';
+  guardarConfigAlertas();
+  actualizarEstadoNotif();
+  if (perm === 'granted') {
+    new Notification('✅ FinanzasPro', { body: 'Notificaciones activadas. Te avisaremos antes de cada vencimiento.', icon: '💰' });
+    programarRevisionDiaria();
+  }
+}
+
+function getVencimientosProximos(diasMax) {
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  return state.gastos.filter(g => {
+    if (!g.vencimiento) return false;
+    const v = new Date(g.vencimiento + 'T00:00:00');
+    const dias = Math.round((v - hoy) / (1000*60*60*24));
+    return dias >= 0 && dias <= diasMax;
+  }).sort((a, b) => new Date(a.vencimiento) - new Date(b.vencimiento));
+}
+
+function getVencidos() {
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  return state.gastos.filter(g => {
+    if (!g.vencimiento) return false;
+    return new Date(g.vencimiento + 'T00:00:00') < hoy;
+  });
+}
+
+function renderListaVencimientosPanel() {
+  const dias = alertasConfig.dias || 3;
+  const proximos = getVencimientosProximos(15);
+  const vencidos = getVencidos();
+  const todos = [...vencidos, ...proximos];
+  const el = document.getElementById('lista-vencimientos-panel');
+  if (!el) return;
+  if (!todos.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Sin vencimientos próximos</div></div>';
+    return;
+  }
+  el.innerHTML = todos.map(g => {
+    const vInfo = vencimientoInfo(g.vencimiento);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <span style="font-weight:600;color:var(--text)">${g.nombre}</span>
+        <span style="font-size:11px;color:var(--text3);margin-left:8px">${CAT_LABELS[g.categoria]||g.categoria}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="neg">-${fmt(parseFloat(g.monto)||0)}</span>
+        <span style="color:${vInfo.color};font-weight:600;font-size:12px">${vInfo.icon} ${vInfo.texto}</span>
+        <button class="btn btn-ghost btn-sm" onclick="enviarAlertaGasto('${g.id}')">📧</button>
+        <button class="btn btn-ghost btn-sm" onclick="notificarGasto('${g.id}')">🔔</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Notificaciones del navegador ──────────────────────────────────────────────
+function notificarGasto(gastoId) {
+  const g = state.gastos.find(g => g.id === gastoId);
+  if (!g) return;
+  if (Notification.permission !== 'granted') { alert('Activa las notificaciones primero'); return; }
+  const vInfo = vencimientoInfo(g.vencimiento);
+  new Notification(`${vInfo.icon} ${g.nombre}`, {
+    body: `${vInfo.texto} — ${fmt(parseFloat(g.monto)||0)}`,
+    icon: '💰'
+  });
+}
+
+function verificarVencimientosNotif() {
+  if (Notification.permission !== 'granted') { alert('Activa las notificaciones primero'); return; }
+  const dias = alertasConfig.dias || 3;
+  const proximos = getVencimientosProximos(dias);
+  const vencidos = getVencidos();
+  if (!proximos.length && !vencidos.length) {
+    new Notification('✅ FinanzasPro', { body: 'Sin vencimientos próximos.', icon: '💰' });
+    return;
+  }
+  vencidos.forEach(g => {
+    new Notification(`🔴 VENCIDO: ${g.nombre}`, { body: `Venció el ${g.vencimiento} — ${fmt(parseFloat(g.monto)||0)}`, icon: '💰' });
+  });
+  proximos.forEach(g => {
+    const vInfo = vencimientoInfo(g.vencimiento);
+    new Notification(`${vInfo.icon} ${g.nombre}`, { body: `${vInfo.texto} — ${fmt(parseFloat(g.monto)||0)}`, icon: '💰' });
+  });
+}
+
+// Programar revisión diaria a la hora configurada
+let _revisionTimer = null;
+function programarRevisionDiaria() {
+  if (_revisionTimer) clearTimeout(_revisionTimer);
+  const hora = (alertasConfig.hora || '08:00').split(':');
+  const ahora = new Date();
+  const objetivo = new Date();
+  objetivo.setHours(parseInt(hora[0]), parseInt(hora[1]), 0, 0);
+  if (objetivo <= ahora) objetivo.setDate(objetivo.getDate() + 1);
+  const ms = objetivo - ahora;
+  _revisionTimer = setTimeout(() => {
+    verificarVencimientosNotif();
+    enviarAlertasAhora();
+    programarRevisionDiaria(); // schedule next day
+  }, ms);
+}
+
+// ── EmailJS ───────────────────────────────────────────────────────────────────
+function mostrarEjsFeedback(tipo, msg) {
+  const el = document.getElementById('ejs-feedback');
+  if (!el) return;
+  el.style.display = 'block';
+  const colors = { ok: 'var(--green)', error: 'var(--red)', loading: 'var(--amber)' };
+  el.style.color = colors[tipo] || 'var(--text2)';
+  el.textContent = msg;
+}
+
+async function enviarEmailVencimiento(gasto, emailDest, nombre) {
+  guardarConfigAlertas();
+  const cfg = alertasConfig;
+  const vInfo = vencimientoInfo(gasto.vencimiento);
+  if (typeof emailjs === 'undefined') throw new Error('EmailJS no cargó — recarga la página');
+  emailjs.init({ publicKey: cfg.ejsPubkey || EMAILJS_PUBKEY });
+  return emailjs.send(
+    cfg.ejsService  || EMAILJS_SERVICE,
+    cfg.ejsTemplate || EMAILJS_TEMPLATE,
+    {
+      email_destino:     emailDest,
+      nombre:            nombre || 'Usuario',
+      gasto_nombre:      gasto.nombre,
+      monto:             fmt(parseFloat(gasto.monto)||0),
+      fecha_vencimiento: gasto.vencimiento,
+      dias_restantes:    vInfo?.texto || ''
+    }
+  );
+}
+
+async function enviarAlertaGasto(gastoId) {
+  const g = state.gastos.find(g => g.id === gastoId);
+  if (!g) return;
+  guardarConfigAlertas();
+  const email = alertasConfig.email;
+  if (!email) { alert('Ingresa tu email en la configuración de EmailJS'); return; }
+  mostrarEjsFeedback('loading', 'Enviando…');
+  try {
+    await enviarEmailVencimiento(g, email, alertasConfig.nombre);
+    mostrarEjsFeedback('ok', `✓ Email enviado a ${email}`);
+  } catch(e) {
+    mostrarEjsFeedback('error', 'Error: ' + (e.text || e.message || JSON.stringify(e)));
+  }
+}
+
+async function probarEmail() {
+  guardarConfigAlertas();
+  const email = alertasConfig.email;
+  if (!email) { alert('Ingresa tu email destino primero'); return; }
+  mostrarEjsFeedback('loading', 'Enviando email de prueba…');
+  if (typeof emailjs === 'undefined') { mostrarEjsFeedback('error', 'EmailJS no cargó — recarga la página'); return; }
+  try {
+    emailjs.init({ publicKey: alertasConfig.ejsPubkey || EMAILJS_PUBKEY });
+    await emailjs.send(
+      alertasConfig.ejsService || EMAILJS_SERVICE,
+      alertasConfig.ejsTemplate || EMAILJS_TEMPLATE,
+      {
+        email_destino: email,
+        nombre: alertasConfig.nombre || 'Usuario',
+        gasto_nombre: 'Email de prueba FinanzasPro',
+        monto: '$0',
+        fecha_vencimiento: new Date().toISOString().split('T')[0],
+        dias_restantes: 'Esto es una prueba'
+      }
+    );
+    mostrarEjsFeedback('ok', `✓ Email de prueba enviado a ${email}`);
+  } catch(e) {
+    mostrarEjsFeedback('error', 'Error: ' + (e.text || e.message || JSON.stringify(e)));
+  }
+}
+
+async function enviarAlertasAhora() {
+  guardarConfigAlertas();
+  const email = alertasConfig.email;
+  const dias = alertasConfig.dias || 3;
+  const proximos = getVencimientosProximos(dias);
+  const vencidos = getVencidos();
+  const todos = [...vencidos, ...proximos];
+  if (!todos.length) { alert('No hay vencimientos próximos para alertar'); return; }
+  if (!email) { alert('Configura tu email en el panel de Alertas primero'); showPanel('alertas-config'); return; }
+  let enviados = 0, errores = 0;
+  for (const g of todos) {
+    try {
+      await enviarEmailVencimiento(g, email, alertasConfig.nombre);
+      enviados++;
+    } catch(e) { errores++; }
+  }
+  alert(`✓ ${enviados} alerta(s) enviada(s) a ${email}${errores > 0 ? `. ${errores} error(es).` : '.'}`);
+}
+
+// ============================
 // EXPORTAR
 // ============================
 function exportData() {
@@ -3620,6 +4024,7 @@ function exportCSV() {
 async function init() {
   loadState();
   loadGistConfig();
+  loadAlertasConfig();
 
   if (!state.deudas) state.deudas = [];
   if (!state.simulaciones) state.simulaciones = [];
@@ -3673,6 +4078,9 @@ async function init() {
   if (!state.ingresos.length && !state.gastos.length && !gistConfig.gistId) {
     loadDemoData();
   }
+
+  // Start daily vencimiento check
+  if (alertasConfig.notifActivas) programarRevisionDiaria();
 }
 
 function loadDemoData() {
