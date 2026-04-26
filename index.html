@@ -489,27 +489,36 @@
       <!-- Alertas -->
       <div id="alertas-container"></div>
 
+      <!-- Mes actual header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-family:var(--font-head);font-size:20px;font-weight:700;color:var(--text)" id="dash-mes-titulo">—</div>
+          <div style="font-size:12px;color:var(--text3)" id="dash-aviso-fijos"></div>
+        </div>
+        <button class="btn btn-green btn-sm" id="btn-autocopiar" onclick="autocopiarMesActual()" style="display:none">⚡ Copiar fijos al mes actual</button>
+      </div>
+
       <!-- Métricas -->
       <div class="grid4" style="margin-bottom:20px">
         <div class="metric-card green">
-          <div class="metric-label">Ingresos totales</div>
+          <div class="metric-label">Ingresos del mes</div>
           <div class="metric-val green" id="dash-ingresos">$0</div>
-          <div class="metric-sub" id="dash-ingresos-sub">0 fuentes</div>
+          <div class="metric-sub" id="dash-ingresos-sub">0 registros</div>
         </div>
         <div class="metric-card red">
-          <div class="metric-label">Gastos totales</div>
+          <div class="metric-label">Gastos del mes</div>
           <div class="metric-val red" id="dash-gastos">$0</div>
           <div class="metric-sub" id="dash-gastos-sub">0 categorías</div>
         </div>
         <div class="metric-card blue">
-          <div class="metric-label">Ahorro mensual</div>
+          <div class="metric-label">Balance mensual</div>
           <div class="metric-val blue" id="dash-ahorro">$0</div>
           <div class="metric-sub" id="dash-ahorro-pct">0% de ingresos</div>
         </div>
         <div class="metric-card amber">
           <div class="metric-label">Tasa de ahorro</div>
           <div class="metric-val amber" id="dash-tasa">0%</div>
-          <div class="metric-sub">Meta: <span id="dash-meta-ahorro">$0</span>/mes</div>
+          <div class="metric-sub">Meta total: <span id="dash-meta-ahorro">$0</span></div>
         </div>
       </div>
 
@@ -518,13 +527,13 @@
         <div class="card">
           <div class="card-title">Distribución de gastos</div>
           <div class="chart-box" style="height:240px">
-            <canvas id="chartPie" role="img" aria-label="Distribución de gastos por categoría">Gráfica de distribución de gastos</canvas>
+            <canvas id="chartPie">Gráfica de distribución de gastos</canvas>
           </div>
         </div>
         <div class="card">
           <div class="card-title">Ingresos vs Gastos</div>
           <div class="chart-box" style="height:240px">
-            <canvas id="chartBar" role="img" aria-label="Comparativa ingresos vs gastos">Gráfica comparativa</canvas>
+            <canvas id="chartBar">Gráfica comparativa</canvas>
           </div>
         </div>
       </div>
@@ -535,15 +544,23 @@
         <div id="budget-progress-list"></div>
       </div>
 
+      <!-- Histórico últimos 6 meses -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">Evolución últimos 6 meses</div>
+        <div class="chart-box" style="height:220px">
+          <canvas id="chartHistorico">Histórico</canvas>
+        </div>
+      </div>
+
       <!-- Resumen rápido -->
       <div class="grid2">
         <div class="card">
-          <div class="card-title">Últimos ingresos registrados</div>
-          <div id="dash-ingresos-list"><div class="empty"><div class="empty-text">Sin ingresos registrados</div></div></div>
+          <div class="card-title">Ingresos este mes</div>
+          <div id="dash-ingresos-list"><div class="empty"><div class="empty-text">Sin ingresos este mes</div></div></div>
         </div>
         <div class="card">
-          <div class="card-title">Últimos gastos registrados</div>
-          <div id="dash-gastos-list"><div class="empty"><div class="empty-text">Sin gastos registrados</div></div></div>
+          <div class="card-title">Gastos este mes</div>
+          <div id="dash-gastos-list"><div class="empty"><div class="empty-text">Sin gastos este mes</div></div></div>
         </div>
       </div>
     </div>
@@ -2826,20 +2843,78 @@ function renderSimulaciones() {
 // ============================
 // DASHBOARD
 // ============================
+// Auto-copy fixed records to current month if missing
+function autocopiarMesActual() {
+  const h = new Date();
+  const curKey = mesKey(h.getFullYear(), h.getMonth());
+  const prev = prevMes(h.getFullYear(), h.getMonth());
+  const prevIng = ingresosDelMes(prev.y, prev.m);
+  const prevGas = gastosDelMes(prev.y, prev.m);
+  const curIng = ingresosDelMes(h.getFullYear(), h.getMonth());
+  const curGas = gastosDelMes(h.getFullYear(), h.getMonth());
+  let added = 0;
+
+  // Copy fixed ingresos
+  prevIng.filter(i => i.tipo === 'fijo').forEach(i => {
+    if (!curIng.find(x => x.nombre === i.nombre)) {
+      state.ingresos.push({ ...i, id: uid(), mes: curKey, fecha: curKey });
+      added++;
+    }
+  });
+  // Copy fixed gastos
+  prevGas.filter(g => g.tipo === 'fijo').forEach(g => {
+    if (!curGas.find(x => x.nombre === g.nombre)) {
+      state.gastos.push({ ...g, id: uid(), mes: curKey, fecha: curKey });
+      added++;
+    }
+  });
+
+  if (added > 0) {
+    saveState();
+    renderDashboard();
+    alert(`✓ Se copiaron ${added} registro(s) fijos del mes anterior.`);
+  } else {
+    alert('No hay registros fijos nuevos para copiar.');
+  }
+}
+
 function renderDashboard() {
+  const h = new Date();
+  const y = h.getFullYear(), m = h.getMonth();
   const ing = totalIngresos();
   const gas = totalGastos();
   const bal = ing - gas;
   const tasa = ing > 0 ? (bal / ing * 100) : 0;
 
+  // Mes actual header
+  const titulo = document.getElementById('dash-mes-titulo');
+  if (titulo) titulo.textContent = mesLabelStr(y, m);
+
+  // Detect if current month is empty but prev month has data
+  const prev = prevMes(y, m);
+  const prevIng = ingresosDelMes(prev.y, prev.m);
+  const prevGas = gastosDelMes(prev.y, prev.m);
+  const curIng = ingresosDelMes(y, m);
+  const curGas = gastosDelMes(y, m);
+  const hasFijosToCopy = (
+    prevIng.some(i => i.tipo === 'fijo' && !curIng.find(x => x.nombre === i.nombre)) ||
+    prevGas.some(g => g.tipo === 'fijo' && !curGas.find(x => x.nombre === g.nombre))
+  );
+  const avisoEl = document.getElementById('dash-aviso-fijos');
+  const btnAuto = document.getElementById('btn-autocopiar');
+  if (avisoEl) avisoEl.textContent = hasFijosToCopy ? '⚡ Tienes registros fijos del mes pasado sin copiar' : '';
+  if (btnAuto) btnAuto.style.display = hasFijosToCopy ? '' : 'none';
+
+  // Metrics
   document.getElementById('dash-ingresos').textContent = fmt(ing);
-  document.getElementById('dash-ingresos-sub').textContent = state.ingresos.length + ' fuente(s)';
+  document.getElementById('dash-ingresos-sub').textContent = curIng.length + ' registro(s)';
   document.getElementById('dash-gastos').textContent = fmt(gas);
   document.getElementById('dash-gastos-sub').textContent = Object.keys(gastosPorCategoria()).length + ' categoría(s)';
   document.getElementById('dash-ahorro').textContent = fmt(bal);
   document.getElementById('dash-tasa').textContent = fmtDec(tasa) + '%';
   document.getElementById('dash-ahorro-pct').textContent = fmtDec(tasa) + '% de ingresos';
-  const _ma = document.getElementById('dash-meta-ahorro'); if(_ma) _ma.textContent = fmt((state.metasAhorro||[]).reduce((a,m)=>a+m.objetivo,0));
+  const _ma = document.getElementById('dash-meta-ahorro');
+  if (_ma) _ma.textContent = fmt((state.metasAhorro||[]).reduce((a,m)=>a+m.objetivo,0));
 
   updateSidebar();
   renderAlertas();
@@ -2847,6 +2922,19 @@ function renderDashboard() {
   renderDashLists();
   renderChartPie();
   renderChartBar();
+  renderChartHistorico();
+
+  // Auto-refresh when month changes (check every minute)
+  if (!window._dashRefreshTimer) {
+    window._dashRefreshTimer = setInterval(() => {
+      const now = new Date();
+      if (now.getMonth() !== m || now.getFullYear() !== y) {
+        clearInterval(window._dashRefreshTimer);
+        window._dashRefreshTimer = null;
+        renderDashboard();
+      }
+    }, 60000);
+  }
 }
 
 function updateSidebar() {
@@ -2943,6 +3031,46 @@ function renderChartPie() {
         tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${fmt(ctx.raw)}` } }
       },
       cutout: '65%'
+    }
+  });
+}
+
+function renderChartHistorico() {
+  destroyChart('historico');
+  const h = new Date();
+  const meses = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(h.getFullYear(), h.getMonth() - i, 1);
+    meses.push({ y: d.getFullYear(), m: d.getMonth(), label: d.toLocaleString('es-CO', { month: 'short' }) });
+  }
+  const ingresos = meses.map(mes => totalIngresosDelMes(mes.y, mes.m));
+  const gastos   = meses.map(mes => totalGastosDelMes(mes.y, mes.m));
+  const balances = meses.map((_, i) => ingresos[i] - gastos[i]);
+  const labels   = meses.map(mes => mes.label.charAt(0).toUpperCase() + mes.label.slice(1));
+
+  const canvas = document.getElementById('chartHistorico');
+  if (!canvas) return;
+  charts.historico = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Ingresos', data: ingresos, backgroundColor: 'rgba(54,211,153,0.6)', borderColor: '#36d399', borderWidth: 1, borderRadius: 4 },
+        { label: 'Gastos',   data: gastos,   backgroundColor: 'rgba(255,107,107,0.6)', borderColor: '#ff6b6b', borderWidth: 1, borderRadius: 4 },
+        { label: 'Balance',  data: balances,  type: 'line', borderColor: '#4f7fff', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, tension: 0.4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#9aa0b8', font: { size: 11 }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)}` } }
+      },
+      scales: {
+        x: { ticks: { color: '#9aa0b8', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: '#9aa0b8', callback: v => fmt(v), font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+      }
     }
   });
 }
@@ -3516,54 +3644,9 @@ function loadDemoData() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
-</script>
 
-<!-- MOBILE BOTTOM NAV -->
-<nav class="mobile-nav" id="mobile-nav">
-  <button class="mobile-nav-item active" id="mnav-dashboard" onclick="mobileNav('dashboard')">
-    <span class="mobile-nav-icon">📊</span>
-    <span class="mobile-nav-label">Inicio</span>
-  </button>
-  <button class="mobile-nav-item" id="mnav-ingresos" onclick="mobileNav('ingresos')">
-    <span class="mobile-nav-icon">💰</span>
-    <span class="mobile-nav-label">Ingresos</span>
-  </button>
-  <button class="mobile-nav-item" id="mnav-gastos" onclick="mobileNav('gastos')">
-    <span class="mobile-nav-icon">💸</span>
-    <span class="mobile-nav-label">Gastos</span>
-  </button>
-  <button class="mobile-nav-item" id="mnav-deudas" onclick="mobileNav('deudas')">
-    <span class="mobile-nav-icon">💳</span>
-    <span class="mobile-nav-label">Deudas</span>
-  </button>
-  <button class="mobile-nav-item" id="mnav-more" onclick="toggleMobileMore()">
-    <span class="mobile-nav-icon">☰</span>
-    <span class="mobile-nav-label">Más</span>
-  </button>
-</nav>
 
-<!-- MOBILE MORE MENU -->
-<div class="mobile-more-overlay" id="mobile-more-overlay" onclick="closeMobileMore()">
-  <div onclick="event.stopPropagation()">
-    <div class="mobile-more-item" id="mmore-simulador" onclick="mobileNav('simulador');closeMobileMore()">
-      <span>🎯</span> Simulador
-    </div>
-    <div class="mobile-more-item" id="mmore-proyecciones" onclick="mobileNav('proyecciones');closeMobileMore()">
-      <span>📈</span> Proyecciones
-    </div>
-    <div class="mobile-more-item" id="mmore-ahorro" onclick="mobileNav('ahorro');closeMobileMore()">
-      <span>🏦</span> Ahorro & Inversión
-    </div>
-    <div class="mobile-more-item" id="mmore-nube" onclick="mobileNav('nube');closeMobileMore()">
-      <span>☁️</span> Nube / Sync
-    </div>
-    <div class="mobile-more-item" onclick="exportCSV();closeMobileMore()">
-      <span>📤</span> Exportar CSV
-    </div>
-  </div>
-</div>
-
-<script>
+// Mobile navigation (merged)
 // Mobile navigation
 const MOBILE_NAV_ITEMS = ['dashboard','ingresos','gastos','deudas'];
 const MOBILE_MORE_ITEMS = ['simulador','proyecciones','ahorro','nube'];
@@ -3596,6 +3679,8 @@ function closeMobileMore() {
 // Sync mobile nav with desktop nav clicks
 const _origShowPanel = showPanel;
 // Already patched — mobileNav calls showPanel internally
+
 </script>
+
 </body>
 </html>
