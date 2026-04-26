@@ -211,17 +211,109 @@
   input[type=range] { -webkit-appearance: none; height: 4px; border-radius: 2px; background: var(--surface); padding: 0; border: none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
 
-  /* RESPONSIVE */
-  @media(max-width: 900px) {
-    .sidebar { display: none; }
+  /* RESPONSIVE — MOBILE */
+  /* Bottom nav for mobile */
+  .mobile-nav { display: none; }
+  .mobile-topbar-title { display: none; }
+
+  @media(max-width: 768px) {
+    /* Hide desktop sidebar */
+    .sidebar { display: none !important; }
     .main { margin-left: 0; }
-    .grid4, .grid3 { grid-template-columns: 1fr 1fr; }
+
+    /* Topbar mobile */
+    .topbar { padding: 0 12px; height: 50px; }
+    .page-title { font-size: 14px; }
+    .topbar-actions .btn-ghost:not(#sync-btn-topbar) { display: none; }
+    #sync-btn-topbar { font-size: 11px; padding: 5px 8px; }
+
+    /* Content padding */
+    .content { padding: 12px 12px 80px; }
+
+    /* Grids */
+    .grid2, .grid3, .grid4 { grid-template-columns: 1fr 1fr; gap: 10px; }
     .scenario-grid { grid-template-columns: 1fr; }
-  }
-  @media(max-width: 600px) {
-    .grid2, .grid3, .grid4 { grid-template-columns: 1fr; }
     .form-row.cols2, .form-row.cols3 { grid-template-columns: 1fr; }
-    .content { padding: 16px; }
+
+    /* Cards */
+    .card { padding: 14px; }
+    .modal { padding: 20px 16px; width: 95vw !important; max-width: 95vw !important; }
+    .amort-modal { width: 95vw !important; }
+    .modal-overlay.wide .modal { width: 95vw !important; }
+
+    /* Metrics */
+    .metric-val { font-size: 20px; }
+
+    /* Mes nav wrap */
+    .mes-nav { padding: 4px 8px; }
+    .mes-label { font-size: 12px; min-width: 90px; }
+
+    /* Tables: horizontal scroll */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { min-width: 520px; }
+
+    /* Deuda cards */
+    .deuda-stats { grid-template-columns: 1fr 1fr; }
+    .cajas-grid { grid-template-columns: 1fr 1fr; }
+    .fijos-grid { grid-template-columns: 1fr 1fr; }
+
+    /* Bottom nav */
+    .mobile-nav {
+      display: flex;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      z-index: 200;
+      padding: 6px 0 env(safe-area-inset-bottom, 6px);
+    }
+    .mobile-nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 4px 2px;
+      cursor: pointer;
+      color: var(--text3);
+      font-size: 9px;
+      font-family: var(--font-body);
+      border: none;
+      background: none;
+      transition: color .15s;
+    }
+    .mobile-nav-item.active { color: var(--accent); }
+    .mobile-nav-item:hover { color: var(--text2); }
+    .mobile-nav-icon { font-size: 20px; line-height: 1; }
+    .mobile-nav-label { font-size: 9px; white-space: nowrap; }
+
+    /* More menu overlay */
+    .mobile-more-overlay {
+      display: none;
+      position: fixed;
+      bottom: 60px; left: 0; right: 0;
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      z-index: 199;
+      padding: 8px 0;
+    }
+    .mobile-more-overlay.open { display: block; }
+    .mobile-more-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 20px; cursor: pointer; color: var(--text2); font-size: 14px;
+    }
+    .mobile-more-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+    .mobile-more-item.active { color: var(--accent); }
+  }
+
+  @media(max-width: 420px) {
+    .grid2, .grid4 { grid-template-columns: 1fr; }
+    .grid3 { grid-template-columns: 1fr 1fr; }
+    .metric-val { font-size: 18px; }
+    .deuda-stats { grid-template-columns: 1fr 1fr; }
+    .cajas-grid { grid-template-columns: 1fr; }
+    .fijos-grid { grid-template-columns: 1fr; }
+    .section-header { flex-direction: column; align-items: flex-start; gap: 10px; }
   }
 
   /* ANIMATIONS */
@@ -3424,6 +3516,86 @@ function loadDemoData() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+</script>
+
+<!-- MOBILE BOTTOM NAV -->
+<nav class="mobile-nav" id="mobile-nav">
+  <button class="mobile-nav-item active" id="mnav-dashboard" onclick="mobileNav('dashboard')">
+    <span class="mobile-nav-icon">📊</span>
+    <span class="mobile-nav-label">Inicio</span>
+  </button>
+  <button class="mobile-nav-item" id="mnav-ingresos" onclick="mobileNav('ingresos')">
+    <span class="mobile-nav-icon">💰</span>
+    <span class="mobile-nav-label">Ingresos</span>
+  </button>
+  <button class="mobile-nav-item" id="mnav-gastos" onclick="mobileNav('gastos')">
+    <span class="mobile-nav-icon">💸</span>
+    <span class="mobile-nav-label">Gastos</span>
+  </button>
+  <button class="mobile-nav-item" id="mnav-deudas" onclick="mobileNav('deudas')">
+    <span class="mobile-nav-icon">💳</span>
+    <span class="mobile-nav-label">Deudas</span>
+  </button>
+  <button class="mobile-nav-item" id="mnav-more" onclick="toggleMobileMore()">
+    <span class="mobile-nav-icon">☰</span>
+    <span class="mobile-nav-label">Más</span>
+  </button>
+</nav>
+
+<!-- MOBILE MORE MENU -->
+<div class="mobile-more-overlay" id="mobile-more-overlay" onclick="closeMobileMore()">
+  <div onclick="event.stopPropagation()">
+    <div class="mobile-more-item" id="mmore-simulador" onclick="mobileNav('simulador');closeMobileMore()">
+      <span>🎯</span> Simulador
+    </div>
+    <div class="mobile-more-item" id="mmore-proyecciones" onclick="mobileNav('proyecciones');closeMobileMore()">
+      <span>📈</span> Proyecciones
+    </div>
+    <div class="mobile-more-item" id="mmore-ahorro" onclick="mobileNav('ahorro');closeMobileMore()">
+      <span>🏦</span> Ahorro & Inversión
+    </div>
+    <div class="mobile-more-item" id="mmore-nube" onclick="mobileNav('nube');closeMobileMore()">
+      <span>☁️</span> Nube / Sync
+    </div>
+    <div class="mobile-more-item" onclick="exportCSV();closeMobileMore()">
+      <span>📤</span> Exportar CSV
+    </div>
+  </div>
+</div>
+
+<script>
+// Mobile navigation
+const MOBILE_NAV_ITEMS = ['dashboard','ingresos','gastos','deudas'];
+const MOBILE_MORE_ITEMS = ['simulador','proyecciones','ahorro','nube'];
+
+function mobileNav(panel) {
+  showPanel(panel);
+  // Update bottom nav active state
+  MOBILE_NAV_ITEMS.forEach(p => {
+    const el = document.getElementById('mnav-' + p);
+    if (el) el.classList.toggle('active', p === panel);
+  });
+  // If panel is in "more" menu, activate the more button
+  const moreBtn = document.getElementById('mnav-more');
+  if (moreBtn) moreBtn.classList.toggle('active', MOBILE_MORE_ITEMS.includes(panel));
+  // Update more menu items
+  MOBILE_MORE_ITEMS.forEach(p => {
+    const el = document.getElementById('mmore-' + p);
+    if (el) el.classList.toggle('active', p === panel);
+  });
+}
+
+function toggleMobileMore() {
+  document.getElementById('mobile-more-overlay').classList.toggle('open');
+}
+
+function closeMobileMore() {
+  document.getElementById('mobile-more-overlay').classList.remove('open');
+}
+
+// Sync mobile nav with desktop nav clicks
+const _origShowPanel = showPanel;
+// Already patched — mobileNav calls showPanel internally
 </script>
 </body>
 </html>
