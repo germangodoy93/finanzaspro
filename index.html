@@ -1430,9 +1430,46 @@ async function conectarGist() {
   try {
     // Verify token works
     await gistRequest('GET', '/user');
-    showGistFeedback('loading', gistId ? 'Verificando Gist existente…' : 'Creando nuevo Gist…');
-    await subirAGist();
-    showGistFeedback('ok', '✓ Conectado correctamente. El sync automático está activo.');
+
+    if (gistId) {
+      // Gist ID provided — load existing data from cloud first
+      showGistFeedback('loading', 'Cargando datos desde la nube…');
+      setSyncStatus('syncing', 'Cargando datos desde la nube…');
+      const data = await gistRequest('GET', '/gists/' + gistId);
+      const file = data.files[GIST_FILENAME];
+      if (file) {
+        const remoteState = JSON.parse(file.content);
+        state = { ...state, ...remoteState };
+        if (!state.deudas) state.deudas = [];
+        if (!state.simulaciones) state.simulaciones = [];
+        if (!state.metasAhorro) state.metasAhorro = [];
+        if (!state.gastosFijosConfig) state.gastosFijosConfig = {};
+        const _h = new Date();
+        const _k = mesKey(_h.getFullYear(), _h.getMonth());
+        state.ingresos.forEach(i => { if (!i.mes) i.mes = _k; });
+        state.gastos.forEach(g => { if (!g.mes) g.mes = _k; });
+        localStorage.setItem('finanzaspro_v2', JSON.stringify(state));
+        renderDashboard();
+        renderIngresos();
+        renderGastos();
+        updateSidebar();
+        lastSyncTime = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+        setSyncStatus('ok', '✓ Datos cargados desde la nube · ' + lastSyncTime);
+        showGistFeedback('ok', '✓ Conectado y datos cargados desde la nube. Auto-sync activo.');
+      } else {
+        // Gist exists but no data file — upload current local data
+        await subirAGist();
+        showGistFeedback('ok', '✓ Conectado correctamente. El sync automático está activo.');
+      }
+    } else {
+      // No Gist ID — create new gist and upload local data
+      showGistFeedback('loading', 'Creando nuevo Gist…');
+      await subirAGist();
+      const idEl = document.getElementById('gist-id');
+      if (idEl) idEl.value = gistConfig.gistId;
+      showGistFeedback('ok', '✓ Gist creado y datos subidos. Auto-sync activo.');
+    }
+
     document.getElementById('btn-desconectar').style.display = '';
     setupAutoSync();
   } catch(e) {
