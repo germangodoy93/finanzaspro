@@ -1484,7 +1484,7 @@
           <option value="uvr">UVR (variable)</option>
         </select>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="deu-tasa-wrap">
         <label class="form-label" id="deu-tasa-label">Tasa de interés E.A. (%) *</label>
         <input type="number" id="deu-tasa" placeholder="12.5" min="0" max="200" step="0.01">
       </div>
@@ -1493,7 +1493,7 @@
       <div style="font-size:11px;color:var(--teal);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">Parámetros UVR</div>
       <div class="form-row cols3">
         <div class="form-group" style="margin-bottom:0">
-          <label class="form-label">Tasa UVR + spread E.A. (%)</label>
+          <label class="form-label">Spread del banco E.A. (%) *</label>
           <input type="number" id="deu-tasa-uvr" placeholder="Ej: 9.5" min="0" max="100" step="0.01" oninput="syncTasaUvr()">
         </div>
         <div class="form-group" style="margin-bottom:0">
@@ -1505,7 +1505,8 @@
           <input type="number" id="deu-valor-uvr" placeholder="Ej: 395.84" min="1" step="0.01" value="395.84">
         </div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:8px">La tasa efectiva equivalente = tasa UVR + inflación estimada. La cuota sube cada año con la inflación.</div>
+      <div id="uvr-tasa-ref" style="font-size:11px;color:var(--teal);margin-top:6px;font-weight:500"></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">El cálculo usa <strong style="color:var(--teal)">solo el spread del banco</strong> sobre el saldo en UVR. La inflación ya está incorporada en la UVR — no se suma a la fórmula. La cuota en pesos sube porque la UVR crece.</div>
     </div>
     <div class="form-row cols2">
       <div class="form-group">
@@ -2634,77 +2635,149 @@ function renderGastos() {
 // Tasa EA a tasa mensual
 function eaAMensual(ea) { return Math.pow(1 + ea / 100, 1/12) - 1; }
 
-// Calcula cuota fija (sistema francés)
+// Sistema francés — cuota fija (en pesos para tasa fija, en UVR para créditos UVR)
 function calcularCuotaFija(capital, tasaMensual, cuotas) {
   if (tasaMensual === 0) return capital / cuotas;
   return capital * (tasaMensual * Math.pow(1 + tasaMensual, cuotas)) / (Math.pow(1 + tasaMensual, cuotas) - 1);
 }
 
-// Genera tabla de amortización (soporta tasa fija y UVR)
+/**
+ * Calcula cuota UVR correctamente.
+ *
+ * Reglas:
+ *  1. Convertir saldo a UVR:  saldo_uvr = saldo_pesos / valorUvr
+ *  2. Tasa mensual = SOLO el spread E.A. del banco (la inflación ya está en la UVR, no va en la fórmula)
+ *  3. n = cuotas restantes
+ *  4. cuota_uvr = PMT(saldo_uvr, i, n)   ← sistema francés en UVR
+ *  5. cuota_pesos = cuota_uvr × valorUvr  ← varia cada mes porque la UVR sube
+ */
+function calcularCuotaUVR(saldoPesos, tasaSpreadEA, cuotasRestantes, valorUvr) {
+  const capitalUvr  = saldoPesos / valorUvr;
+  const i           = eaAMensual(tasaSpreadEA);      // spread mensual SOLO
+  const cuotaUvr    = calcularCuotaFija(capitalUvr, i, cuotasRestantes);
+  const cuotaPesos  = cuotaUvr * valorUvr;
+  return { cuotaUvr, cuotaPesos, capitalUvr, i };
+}
+
+// Genera tabla de amortización (tasa fija y UVR)
 function tablaAmortizacion(deuda) {
-  const isUvr = deuda.tipoTasa === 'uvr';
-  const totalCuotas = deuda.cuotasTotal;
-  const pagadas = deuda.cuotasPagadas || 0;
-  const abonoExtra = deuda.abonos || 0;
-  const inflacionAnual = (deuda.inflacionUvr || 5.8) / 100;
-  const inflacionMensual = Math.pow(1 + inflacionAnual, 1/12) - 1;
+  const isUvr        = deuda.tipoTasa === 'uvr';
+  const totalCuotas  = deuda.cuotasTotal;
+  const pagadas      = deuda.cuotasPagadas || 0;
+  const abonoExtra   = deuda.abonos || 0;
 
-  let saldo = deuda.saldo > 0 ? deuda.saldo : deuda.capital;
+  if (isUvr) {
+    // ── UVR: todo el cálculo en UVR, luego convertir a pesos ─────────────────
+    const valorUvr      = deuda.valorUvr || 406.68;
+    const tasaSpreadEA  = deuda.tasaUvr  || 8.15;
+    const inflacionAnual = (deuda.inflacionUvr || 5.8) / 100;
+    const inflacionMens  = Math.pow(1 + inflacionAnual, 1/12) - 1;
+    const i              = eaAMensual(tasaSpreadEA);   // SOLO spread, sin inflación
+    const cuotasRestantes = totalCuotas - pagadas;
 
-  // Para UVR: la tasa guardada en deuda.tasa ya es la EA combinada (spread+inflacion)
-  // La cuota base se calcula con esa tasa y luego se ajusta mensualmente por inflacion
-  const tm = eaAMensual(deuda.tasa);
-  const cuotaBase = deuda.cuota > 0 ? deuda.cuota : calcularCuotaFija(deuda.capital, tm, totalCuotas);
+    // Saldo inicial en UVR (desde saldo actual en pesos)
+    let saldoUvr = (deuda.saldo > 0 ? deuda.saldo : deuda.capital) / valorUvr;
+    // Cuota fija en UVR (no cambia, la UVR es quien sube)
+    const cuotaUvr = calcularCuotaFija(saldoUvr, i, cuotasRestantes);
 
-  // Para UVR: recalcular cuota sobre saldo actual con la tasa spread (sin inflacion)
-  const tasaSpread = isUvr ? (deuda.tasaUvr || deuda.tasa) : deuda.tasa;
-  const tmSpread = eaAMensual(tasaSpread);
+    // UVR simulada — la UVR crece con inflación estimada mes a mes
+    let uvrSim = valorUvr;
+    const rows = [];
 
-  const rows = [];
-  for (let i = 1; i <= totalCuotas; i++) {
-    // UVR: cada año la cuota sube con la inflación (corrección monetaria)
-    let cuotaMes;
-    if (isUvr) {
-      const añoTranscurrido = Math.floor((i - 1) / 12);
-      cuotaMes = cuotaBase * Math.pow(1 + inflacionAnual, añoTranscurrido);
-    } else {
-      cuotaMes = cuotaBase;
+    for (let m = 1; m <= totalCuotas; m++) {
+      // Cuota en pesos del mes: cuota_uvr × uvr_del_mes
+      const cuotaPesosMes = cuotaUvr * uvrSim;
+      // Intereses: sobre saldo UVR × tasa spread mensual, convertido a pesos
+      const interesUvr    = saldoUvr * i;
+      const interesPesos  = interesUvr * uvrSim;
+      // Abono a capital en UVR
+      let abonoCapitalUvr = cuotaUvr - interesUvr;
+      if (abonoCapitalUvr < 0) abonoCapitalUvr = 0;
+      // Abono extra a capital en UVR (convertir pesos a UVR)
+      const abonoExtraUvr = (m > pagadas && abonoExtra > 0) ? abonoExtra / uvrSim : 0;
+      saldoUvr = Math.max(0, saldoUvr - abonoCapitalUvr - abonoExtraUvr);
+
+      rows.push({
+        num:    m,
+        cuota:  Math.round(cuotaPesosMes),
+        interes: Math.round(interesPesos),
+        capital: Math.round(abonoCapitalUvr * uvrSim),
+        abono:  Math.round(abonoExtraUvr * uvrSim),
+        saldo:  Math.round(saldoUvr * uvrSim),   // saldo en pesos para mostrar
+        saldoUvr: Math.round(saldoUvr * 100) / 100,
+        uvrMes: Math.round(uvrSim * 100) / 100,
+        pagada: m <= pagadas,
+        uvr: true
+      });
+
+      if (saldoUvr <= 0) break;
+      // Avanzar UVR al siguiente mes
+      uvrSim *= (1 + inflacionMens);
     }
+    return rows;
 
-    const interesMes = saldo * (isUvr ? tmSpread + inflacionMensual : tm);
-    let abonoCapital = cuotaMes - interesMes;
-    if (abonoCapital < 0) abonoCapital = 0;
-    const abonoExtraMes = i > pagadas ? abonoExtra : 0;
-    const totalAbono = abonoCapital + abonoExtraMes;
-    saldo = Math.max(0, saldo - totalAbono);
-    rows.push({
-      num: i,
-      cuota: Math.round(cuotaMes),
-      interes: Math.round(interesMes),
-      capital: Math.round(abonoCapital),
-      abono: Math.round(abonoExtraMes),
-      saldo: Math.round(saldo),
-      pagada: i <= pagadas,
-      uvr: isUvr
-    });
-    if (saldo === 0) break;
+  } else {
+    // ── TASA FIJA: cálculo tradicional en pesos ───────────────────────────────
+    const tm       = eaAMensual(deuda.tasa);
+    let saldo      = deuda.saldo > 0 ? deuda.saldo : deuda.capital;
+    const cuota    = deuda.cuota > 0 ? deuda.cuota : calcularCuotaFija(deuda.capital, tm, totalCuotas);
+    const rows     = [];
+
+    for (let m = 1; m <= totalCuotas; m++) {
+      const interesMes    = saldo * tm;
+      let abonoCapital    = cuota - interesMes;
+      if (abonoCapital < 0) abonoCapital = 0;
+      const abonoExtraMes = m > pagadas ? abonoExtra : 0;
+      saldo = Math.max(0, saldo - abonoCapital - abonoExtraMes);
+      rows.push({
+        num:    m,
+        cuota:  Math.round(cuota),
+        interes: Math.round(interesMes),
+        capital: Math.round(abonoCapital),
+        abono:  Math.round(abonoExtraMes),
+        saldo:  Math.round(saldo),
+        pagada: m <= pagadas,
+        uvr:    false
+      });
+      if (saldo === 0) break;
+    }
+    return rows;
   }
-  return rows;
 }
 
 function calcularCuota() {
-  const capital = parseFloat(document.getElementById('deu-capital').value) || 0;
-  const tasa = parseFloat(document.getElementById('deu-tasa').value) || 0;
-  const cuotas = parseInt(document.getElementById('deu-cuotas-total').value) || 0;
-  if (!capital || !tasa || !cuotas) { alert('Completa capital, tasa y número de cuotas'); return; }
-  const tm = eaAMensual(tasa);
-  const cuota = calcularCuotaFija(capital, tm, cuotas);
+  const capital  = parseFloat(document.getElementById('deu-capital').value) || 0;
+  const cuotas   = parseInt(document.getElementById('deu-cuotas-total').value) || 0;
+  const pagadas  = parseInt(document.getElementById('deu-cuotas-pagadas').value) || 0;
+  const tipoTasa = document.getElementById('deu-tipo-tasa').value;
+  const valorUvr = parseFloat(document.getElementById('deu-valor-uvr').value) || 406.68;
+  const spread   = parseFloat(document.getElementById('deu-tasa-uvr').value) || 0;
+  const tasa     = parseFloat(document.getElementById('deu-tasa').value) || 0;
+  if (!capital || !cuotas) { alert('Completa capital y número de cuotas'); return; }
+
+  let cuota, totalPagar, totalIntereses, infoExtra = '';
+
+  if (tipoTasa === 'uvr') {
+    if (!spread) { alert('Completa la tasa spread UVR'); return; }
+    const saldo = parseFloat(document.getElementById('deu-saldo').value) || capital;
+    const n     = cuotas - pagadas;
+    const { cuotaUvr, cuotaPesos, capitalUvr, i } = calcularCuotaUVR(saldo, spread, n, valorUvr);
+    cuota          = cuotaPesos;
+    totalPagar     = cuotaPesos * n;   // aprox — sube con UVR
+    totalIntereses = totalPagar - saldo;
+    infoExtra = ` &nbsp;|&nbsp; Cuota en UVR: <strong style="color:var(--teal)">${cuotaUvr.toFixed(2)} UVR</strong> &nbsp;|&nbsp; Capital UVR: <strong style="color:var(--teal)">${capitalUvr.toFixed(2)} UVR</strong>`;
+  } else {
+    if (!tasa) { alert('Completa la tasa de interés'); return; }
+    const tm = eaAMensual(tasa);
+    cuota          = calcularCuotaFija(capital, tm, cuotas);
+    totalPagar     = cuota * cuotas;
+    totalIntereses = totalPagar - capital;
+  }
+
   document.getElementById('deu-cuota').value = Math.round(cuota);
-  const totalPagar = cuota * cuotas;
-  const totalIntereses = totalPagar - capital;
   const prev = document.getElementById('deu-preview');
   prev.style.display = 'block';
-  prev.innerHTML = `<span style="color:var(--text)">Cuota calculada: </span><strong style="color:var(--accent)">${fmt(cuota)}/mes</strong> &nbsp;|&nbsp; Total a pagar: <strong style="color:var(--red)">${fmt(totalPagar)}</strong> &nbsp;|&nbsp; Intereses totales: <strong style="color:var(--amber)">${fmt(totalIntereses)}</strong>`;
+  prev.innerHTML = `<span style="color:var(--text)">Cuota calculada: </span><strong style="color:var(--accent)">${fmt(cuota)}/mes</strong> &nbsp;|&nbsp; Total a pagar: <strong style="color:var(--red)">${fmt(totalPagar)}</strong> &nbsp;|&nbsp; Intereses estimados: <strong style="color:var(--amber)">${fmt(totalIntereses)}</strong>${infoExtra}${tipoTasa === 'uvr' ? ' <span style="color:var(--text3);font-size:11px">(cuota en pesos varía con la UVR)</span>' : ''}`;
 }
 
 function clearDeuda() {
@@ -2726,27 +2799,32 @@ function clearDeuda() {
 }
 
 function toggleTipoTasa() {
-  const tipo = document.getElementById('deu-tipo-tasa').value;
+  const tipo   = document.getElementById('deu-tipo-tasa').value;
   const uvrSec = document.getElementById('deu-uvr-section');
-  const label = document.getElementById('deu-tasa-label');
+  const tasaWrap = document.getElementById('deu-tasa-wrap');
   if (tipo === 'uvr') {
     uvrSec.style.display = 'block';
-    label.textContent = 'Tasa spread E.A. (%) *';
-    document.getElementById('deu-tasa').placeholder = 'Ej: 9.5';
+    // En UVR el campo deu-tasa es solo referencia visual — se oculta al usuario
+    if (tasaWrap) tasaWrap.style.display = 'none';
     syncTasaUvr();
   } else {
     uvrSec.style.display = 'none';
-    label.textContent = 'Tasa de interés E.A. (%) *';
+    if (tasaWrap) tasaWrap.style.display = 'block';
+    document.getElementById('deu-tasa-label').textContent = 'Tasa de interés E.A. (%) *';
     document.getElementById('deu-tasa').placeholder = '12.5';
   }
 }
 
 function syncTasaUvr() {
-  // Tasa efectiva = (1 + spread/100)*(1 + inflacion/100) - 1, en EA
+  // Solo guarda el spread en deu-tasa para compatibilidad con saveDeuda
+  // El nuevo calcUVR usa tasaUvr (spread) directamente — no la tasa combinada
   const spread = parseFloat(document.getElementById('deu-tasa-uvr').value) || 0;
+  document.getElementById('deu-tasa').value = spread.toFixed(2);
+  // Mostrar tasa efectiva equivalente como info (no como input)
   const inflacion = parseFloat(document.getElementById('deu-inflacion-uvr').value) || 0;
   const tasaEA = ((1 + spread/100) * (1 + inflacion/100) - 1) * 100;
-  document.getElementById('deu-tasa').value = tasaEA.toFixed(2);
+  const infoEl = document.getElementById('uvr-tasa-ref');
+  if (infoEl) infoEl.textContent = 'Tasa efectiva equivalente: ' + tasaEA.toFixed(2) + '% E.A. (referencia)';
 }
 
 function saveDeuda() {
@@ -2829,8 +2907,14 @@ function verAmortizacion(id) {
   const d = state.deudas.find(d => d.id === id);
   if (!d) return;
   const rows = tablaAmortizacion(d);
-  const uvrTag = d.tipoTasa === 'uvr' ? ' <span style="font-size:12px;background:rgba(45,212,191,0.15);color:var(--teal);padding:2px 8px;border-radius:10px;font-family:var(--font-body);font-weight:500">UVR</span>' : '';
+  const isUvr = d.tipoTasa === 'uvr';
+  const uvrTag = isUvr ? ' <span style="font-size:12px;background:rgba(45,212,191,0.15);color:var(--teal);padding:2px 8px;border-radius:10px;font-family:var(--font-body);font-weight:500">UVR</span>' : '';
   document.getElementById('amort-title').innerHTML = '📊 Amortización — ' + d.nombre + uvrTag;
+  // Update headers
+  const headTr = document.querySelector('#modal-amort table thead tr');
+  if (headTr) headTr.innerHTML = isUvr
+    ? '<th>#</th><th>Cuota $</th><th>Interés $</th><th>Capital $</th><th>Abono extra</th><th>Saldo $</th><th>UVR mes</th><th>Estado</th>'
+    : '<th>#</th><th>Cuota</th><th>Interés</th><th>Capital</th><th>Abono extra</th><th>Saldo restante</th><th>Estado</th>';
   const tbody = document.getElementById('amort-tbody');
   tbody.innerHTML = rows.map(r => `
     <tr class="${r.pagada ? 'yr-row' : ''}">
@@ -2840,6 +2924,7 @@ function verAmortizacion(id) {
       <td style="color:var(--green)">${fmt(r.capital)}</td>
       <td style="color:var(--teal)">${r.abono > 0 ? '+' + fmt(r.abono) : '—'}</td>
       <td class="accent">${fmt(r.saldo)}</td>
+      ${isUvr ? `<td style="color:var(--text3);font-size:11px">${r.uvrMes?.toFixed(2) ?? '—'}</td>` : ''}
       <td>${r.pagada
         ? '<span class="chip chip-green">✓ Pagada</span>'
         : r.saldo === 0
