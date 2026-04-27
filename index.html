@@ -559,7 +559,7 @@
 
 <!-- SIDEBAR -->
 <aside class="sidebar">
-  <!-- Collapse toggle -->
+  <!-- Collapse toggle (desktop) -->
   <button class="sidebar-toggle" id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Colapsar menú">‹</button>
 
   <div class="logo">
@@ -569,55 +569,72 @@
       <div class="logo-sub">Gestión financiera</div>
     </div>
   </div>
+
   <nav class="nav">
     <div class="nav-section">Principal</div>
     <div class="nav-item active" onclick="showPanel('dashboard')">
-      <span class="nav-icon">📊</span> Dashboard
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Dashboard</span>
+      <span class="nav-tooltip">Dashboard</span>
     </div>
+
     <div class="nav-section">Gestión</div>
     <div class="nav-item" onclick="showPanel('ingresos')">
-      <span class="nav-icon">💰</span> <span class="nav-label">Ingresos
-    </div></span><span class="nav-tooltip">Ingresos
-    </div></span>
+      <span class="nav-icon">💰</span>
+      <span class="nav-label">Ingresos</span>
+      <span class="nav-tooltip">Ingresos</span>
+    </div>
     <div class="nav-item" onclick="showPanel('gastos')">
-      <span class="nav-icon">💸</span> <span class="nav-label">Gastos
-    </div></span><span class="nav-tooltip">Gastos
-    </div></span>
+      <span class="nav-icon">💸</span>
+      <span class="nav-label">Gastos</span>
+      <span class="nav-tooltip">Gastos</span>
+    </div>
     <div class="nav-item" onclick="showPanel('deudas')">
-      <span class="nav-icon">💳</span> <span class="nav-label">Deudas & Créditos
-    </div></span><span class="nav-tooltip">Deudas & Créditos
-    </div></span>
+      <span class="nav-icon">💳</span>
+      <span class="nav-label">Deudas & Créditos</span>
+      <span class="nav-tooltip">Deudas & Créditos</span>
+    </div>
     <div class="nav-item" onclick="showPanel('simulador')">
-      <span class="nav-icon">🎯</span> <span class="nav-label">Simulador
-    </div></span><span class="nav-tooltip">Simulador
-    </div></span>
+      <span class="nav-icon">🎯</span>
+      <span class="nav-label">Simulador</span>
+      <span class="nav-tooltip">Simulador</span>
+    </div>
+
     <div class="nav-section">Análisis</div>
     <div class="nav-item" onclick="showPanel('proyecciones')">
-      <span class="nav-icon">📈</span> <span class="nav-label">Proyecciones
-    </div></span><span class="nav-tooltip">Proyecciones
-    </div></span>
+      <span class="nav-icon">📈</span>
+      <span class="nav-label">Proyecciones</span>
+      <span class="nav-tooltip">Proyecciones</span>
+    </div>
     <div class="nav-item" onclick="showPanel('ahorro')">
-      <span class="nav-icon">🏦</span> <span class="nav-label">Ahorro
-    </div></span><span class="nav-tooltip">Ahorro
-    </div></span>
+      <span class="nav-icon">🏦</span>
+      <span class="nav-label">Ahorro</span>
+      <span class="nav-tooltip">Ahorro</span>
+    </div>
     <div class="nav-item" onclick="showPanel('inversion')">
-      <span class="nav-icon">📊</span> <span class="nav-label">Inversión
-    </div></span><span class="nav-tooltip">Inversión
-    </div></span>
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Inversión</span>
+      <span class="nav-tooltip">Inversión</span>
+    </div>
+
     <div class="nav-section">Herramientas</div>
     <div class="nav-item" onclick="showPanel('alertas-config')">
-      <span class="nav-icon">🔔</span> <span class="nav-label">Alertas
-    </div></span><span class="nav-tooltip">Alertas
-    </div></span>
+      <span class="nav-icon">🔔</span>
+      <span class="nav-label">Alertas</span>
+      <span class="nav-tooltip">Alertas</span>
+    </div>
     <div class="nav-item" onclick="showPanel('nube')">
-      <span class="nav-icon">☁️</span> <span class="nav-label">Nube / Sync
-    </div></span><span class="nav-tooltip">Nube / Sync
-    </div></span>
+      <span class="nav-icon">☁️</span>
+      <span class="nav-label">Nube / Sync</span>
+      <span class="nav-tooltip">Nube / Sync</span>
+    </div>
     <div class="nav-item" onclick="exportData()">
-      <span class="nav-icon">📤</span> <span class="nav-label">Exportar
-    </div></span><span class="nav-tooltip">Exportar
-    </div></span>
+      <span class="nav-icon">📤</span>
+      <span class="nav-label">Exportar CSV</span>
+      <span class="nav-tooltip">Exportar CSV</span>
+    </div>
   </nav>
+
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11px;color:var(--text3)">
       <span class="sync-dot off" id="sync-dot-sidebar"></span>
@@ -2210,7 +2227,9 @@ function showPanel(name) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => {
-    if (n.textContent.trim().toLowerCase().includes(name === 'dashboard' ? 'dashboard' : PANEL_TITLES[name].toLowerCase().split(' ')[0])) {
+    n.classList.remove('active');
+    const onclick = n.getAttribute('onclick') || '';
+    if (onclick.includes(`'${name}'`) || (name === 'dashboard' && onclick.includes('dashboard'))) {
       n.classList.add('active');
     }
   });
@@ -5693,10 +5712,10 @@ function toggleSidebar() {
 }
 
 function applySidebarState() {
-  const sb   = document.querySelector('.sidebar');
+  const sb  = document.querySelector('.sidebar');
   const main = document.querySelector('.main');
   const btn  = document.getElementById('sidebar-toggle-btn');
-  if (!sb) return;
+  if (!sb || !main) return;  // guard — DOM not ready yet
   sb.classList.toggle('collapsed', sidebarCollapsed);
   main.classList.toggle('collapsed', sidebarCollapsed);
   if (btn) btn.textContent = sidebarCollapsed ? '›' : '‹';
@@ -5704,27 +5723,33 @@ function applySidebarState() {
 
 // ── Mobile sidebar drawer ─────────────────────────────────────────────────────
 function openMobileSidebar() {
-  document.querySelector('.sidebar').classList.add('mobile-open');
-  document.getElementById('sidebar-overlay').classList.add('open');
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  if (sb) sb.classList.add('mobile-open');
+  if (ov) ov.classList.add('open');
   document.body.style.overflow = 'hidden';
 }
 
 function closeMobileSidebar() {
-  document.querySelector('.sidebar').classList.remove('mobile-open');
-  document.getElementById('sidebar-overlay').classList.remove('open');
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  if (sb) sb.classList.remove('mobile-open');
+  if (ov) ov.classList.remove('open');
   document.body.style.overflow = '';
 }
 
-// Close more menu when tapping outside
-document.addEventListener('click', e => {
-  const overlay = document.getElementById('mobile-more-overlay');
-  if (overlay.classList.contains('open') && !overlay.contains(e.target) && e.target.id !== 'mnav-more') {
-    closeMobileMore();
-  }
+// Close more menu when tapping outside — deferred so DOM exists
+window.addEventListener('load', () => {
+  document.addEventListener('click', e => {
+    const overlay = document.getElementById('mobile-more-overlay');
+    if (!overlay) return;
+    if (overlay.classList.contains('open') && !overlay.contains(e.target) && e.target.id !== 'mnav-more') {
+      closeMobileMore();
+    }
+  });
+  // Apply saved sidebar state after DOM is fully ready
+  applySidebarState();
 });
-
-// Apply sidebar state on load
-document.addEventListener('DOMContentLoaded', () => { applySidebarState(); });
 
 </script>
 
