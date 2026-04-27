@@ -399,6 +399,20 @@
   .amort-modal { width: 680px; }
   .modal-overlay.wide .modal { width: 720px; max-width: 97vw; }
 
+  /* CAPEX / OPEX CALCULATOR */
+  .capex-item { display:grid; grid-template-columns:1fr 140px 32px; gap:6px; align-items:center; margin-bottom:6px; }
+  .capex-item input[type=text]   { font-size:12px; padding:6px 10px; }
+  .capex-item input[type=number] { font-size:12px; padding:6px 10px; }
+  .capex-total-row { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--bg4); border-radius:var(--r); margin-top:8px; font-weight:600; }
+  .capex-section-title { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.08em; margin:10px 0 6px; font-weight:600; }
+  .btn-add-item { display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:var(--r); border:1px dashed var(--border2); background:none; color:var(--text3); cursor:pointer; font-size:12px; font-family:var(--font-body); transition:all .15s; }
+  .btn-add-item:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* INVERSIÓN */
+  .inv-tipo-btn { padding: 8px 14px; border-radius: var(--r); border: 1.5px solid var(--border2); background: var(--bg3); color: var(--text2); cursor: pointer; font-family: var(--font-body); font-size: 13px; font-weight: 500; transition: all .15s; }
+  .inv-tipo-btn:hover { border-color: var(--accent); color: var(--text); }
+  .inv-tipo-btn.active { background: rgba(79,127,255,0.12); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
   /* NUBE / GIST SYNC */
   .sync-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
   .sync-dot.ok     { background: var(--green); }
@@ -416,6 +430,8 @@
   .token-input { font-family: var(--font-mono, monospace); font-size: 12px; letter-spacing: 0.03em; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js" defer></script>
 </head>
 <body>
 <div class="app">
@@ -449,7 +465,10 @@
       <span class="nav-icon">📈</span> Proyecciones
     </div>
     <div class="nav-item" onclick="showPanel('ahorro')">
-      <span class="nav-icon">🏦</span> Ahorro & Inversión
+      <span class="nav-icon">🏦</span> Ahorro
+    </div>
+    <div class="nav-item" onclick="showPanel('inversion')">
+      <span class="nav-icon">📊</span> Inversión
     </div>
     <div class="nav-section">Herramientas</div>
     <div class="nav-item" onclick="showPanel('alertas-config')">
@@ -568,6 +587,289 @@
           <div class="card-title">Gastos este mes</div>
           <div id="dash-gastos-list"><div class="empty"><div class="empty-text">Sin gastos este mes</div></div></div>
         </div>
+      </div>
+    </div>
+
+<!-- INVERSIÓN -->
+    <div class="panel" id="panel-inversion">
+      <div class="section-header">
+        <div class="section-title">Calculadora de Inversiones</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="agregarAlComparador()">⊕ Comparar</button>
+          <button class="btn btn-green btn-sm" onclick="guardarInversion()">💾 Guardar</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportarInversionPDF()">📄 PDF</button>
+          <button class="btn btn-primary btn-sm" onclick="calcularInversion()">▶ Calcular</button>
+        </div>
+      </div>
+
+      <!-- TIPO SELECTOR -->
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+        <button class="inv-tipo-btn active" id="itb-cdt" onclick="setTipoInversion('cdt')">📜 CDT / Renta fija</button>
+        <button class="inv-tipo-btn" id="itb-acciones" onclick="setTipoInversion('acciones')">📈 Acciones / ETFs</button>
+        <button class="inv-tipo-btn" id="itb-fondos" onclick="setTipoInversion('fondos')">🏛️ Fondos</button>
+        <button class="inv-tipo-btn" id="itb-negocio" onclick="setTipoInversion('negocio')">🏭 Activo productivo</button>
+      </div>
+
+      <div class="grid2" style="margin-bottom:20px;gap:16px">
+        <!-- INPUTS -->
+        <div style="display:flex;flex-direction:column;gap:14px">
+
+          <!-- DATOS GENERALES -->
+          <div class="card">
+            <div class="card-title">Parámetros generales</div>
+            <div class="form-row cols2">
+              <div class="form-group">
+                <label class="form-label">Capital inicial ($)</label>
+                <input type="number" id="inv-capital" placeholder="10000000" min="0" step="100000" oninput="calcularInversion()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Aportes mensuales ($)</label>
+                <input type="number" id="inv-aportes" placeholder="0" min="0" step="50000" value="0" oninput="calcularInversion()">
+              </div>
+            </div>
+            <div class="form-row cols2">
+              <div class="form-group">
+                <label class="form-label">Horizonte (meses)</label>
+                <input type="number" id="inv-horizonte" placeholder="36" min="1" max="600" value="36" oninput="calcularInversion()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Inflación anual (%)</label>
+                <input type="number" id="inv-inflacion" placeholder="5.8" value="5.8" step="0.1" oninput="calcularInversion()">
+              </div>
+            </div>
+            <div class="form-row cols2">
+              <div class="form-group">
+                <label class="form-label">Tasa impuestos (%)</label>
+                <input type="number" id="inv-impuestos" placeholder="19" value="19" step="0.5" oninput="calcularInversion()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Perfil de riesgo</label>
+                <select id="inv-perfil" onchange="calcularInversion()">
+                  <option value="conservador">🌱 Conservador</option>
+                  <option value="moderado" selected>⚡ Moderado</option>
+                  <option value="agresivo">🚀 Agresivo</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- CDT / RENTA FIJA -->
+          <div class="card inv-seccion" id="inv-sec-cdt">
+            <div class="card-title">📜 CDT / Renta fija</div>
+            <div class="form-row cols2">
+              <div class="form-group">
+                <label class="form-label">Tasa de interés E.A. (%)</label>
+                <input type="number" id="cdt-tasa" placeholder="12.5" step="0.01" oninput="calcularInversion()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Tipo de interés</label>
+                <select id="cdt-tipo" onchange="calcularInversion()">
+                  <option value="compuesto">Compuesto</option>
+                  <option value="simple">Simple</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Periodicidad de pago</label>
+              <select id="cdt-periodo" onchange="calcularInversion()">
+                <option value="mensual">Mensual</option>
+                <option value="trimestral">Trimestral</option>
+                <option value="semestral">Semestral</option>
+                <option value="anual">Al vencimiento</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- ACCIONES / ETFs -->
+          <div class="card inv-seccion" id="inv-sec-acciones" style="display:none">
+            <div class="card-title">📈 Acciones / ETFs</div>
+            <div class="form-row cols2">
+              <div class="form-group">
+                <label class="form-label">Retorno anual esperado (%)</label>
+                <input type="number" id="acc-retorno" placeholder="12" step="0.5" value="12" oninput="calcularInversion()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Volatilidad anual (%)</label>
+                <input type="number" id="acc-volatilidad" placeholder="20" step="0.5" value="20" oninput="calcularInversion()">
+              </div>
+            </div>
+            <div class="form-row cols2">
+              <div class="form-group">
+                <label class="form-label">Dividendos anuales (%)</label>
+                <input type="number" id="acc-dividendos" placeholder="2" step="0.1" value="2" oninput="calcularInversion()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Reinvertir dividendos</label>
+                <select id="acc-reinvertir" onchange="calcularInversion()">
+                  <option value="si">Sí — DRIP</option>
+                  <option value="no">No — retirar</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- FONDOS -->
+          <div class="card inv-seccion" id="inv-sec-fondos" style="display:none">
+            <div class="card-title">🏛️ Fondos de inversión</div>
+            <div class="form-row cols2">
+              <div class="form-group">
+                <label class="form-label">Rentabilidad histórica E.A. (%)</label>
+                <input type="number" id="fon-rentabilidad" placeholder="10" step="0.1" value="10" oninput="calcularInversion()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Comisión de administración (%/año)</label>
+                <input type="number" id="fon-comision" placeholder="1.5" step="0.1" value="1.5" oninput="calcularInversion()">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nivel de riesgo del fondo</label>
+              <select id="fon-riesgo" onchange="calcularInversion()">
+                <option value="bajo">Bajo (renta fija)</option>
+                <option value="medio" selected>Medio (balanceado)</option>
+                <option value="alto">Alto (renta variable)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- ACTIVO PRODUCTIVO -->
+          <div class="card inv-seccion" id="inv-sec-negocio" style="display:none">
+            <div class="card-title">🏭 Activo productivo / Negocio</div>
+
+            <!-- CAPEX -->
+            <div class="capex-section-title">📦 CAPEX — Inversión inicial</div>
+            <div id="capex-items-list"></div>
+            <button class="btn-add-item" onclick="agregarItemCAPEX()">+ Agregar ítem</button>
+            <div class="capex-total-row">
+              <span style="color:var(--text2)">Total CAPEX</span>
+              <span style="color:var(--red);font-size:15px" id="capex-total-display">$0</span>
+            </div>
+            <input type="hidden" id="neg-capex" value="0">
+
+            <div style="margin-top:14px"></div>
+
+            <!-- OPEX -->
+            <div class="capex-section-title">⚙️ OPEX — Costos operativos mensuales</div>
+            <div id="opex-items-list"></div>
+            <button class="btn-add-item" onclick="agregarItemOPEX()">+ Agregar ítem</button>
+            <div class="capex-total-row">
+              <span style="color:var(--text2)">Total OPEX / mes</span>
+              <span style="color:var(--amber);font-size:15px" id="opex-total-display">$0</span>
+            </div>
+            <input type="hidden" id="neg-opex" value="0">
+
+            <div style="margin-top:14px"></div>
+
+            <!-- INGRESOS -->
+            <div class="capex-section-title">💰 Ingresos estimados mensuales</div>
+            <div id="ingresos-items-list"></div>
+            <button class="btn-add-item" onclick="agregarItemIngreso()">+ Agregar fuente</button>
+            <div class="capex-total-row">
+              <span style="color:var(--text2)">Total ingresos / mes</span>
+              <span style="color:var(--green);font-size:15px" id="ingresos-total-display">$0</span>
+            </div>
+            <input type="hidden" id="neg-ingresos" value="0">
+
+            <div style="margin-top:14px">
+              <div class="form-row cols2">
+                <div class="form-group">
+                  <label class="form-label">Crecimiento anual ingresos (%)</label>
+                  <input type="number" id="neg-crecimiento" placeholder="10" step="0.5" value="10" oninput="calcularInversion()">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Margen bruto estimado</label>
+                  <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:9px 12px;font-size:13px" id="neg-margen-display" style="color:var(--text3)">—</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Plantillas rápidas -->
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+              <div class="capex-section-title">⚡ Plantillas rápidas</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-ghost btn-sm" onclick="cargarPlantilla('empanadas')">🫔 Empanadas</button>
+                <button class="btn btn-ghost btn-sm" onclick="cargarPlantilla('cafeteria')">☕ Cafetería</button>
+                <button class="btn btn-ghost btn-sm" onclick="cargarPlantilla('impresora3d')">🖨️ Impresora 3D</button>
+                <button class="btn btn-ghost btn-sm" onclick="cargarPlantilla('ecommerce')">🛍️ E-commerce</button>
+                <button class="btn btn-danger btn-sm" onclick="limpiarNegocio()">🗑 Limpiar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RESULTADOS RÁPIDOS -->
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card" id="inv-resultados-card">
+            <div class="card-title">Indicadores clave</div>
+            <div id="inv-kpis"><div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Completa los datos y haz clic en Calcular</div></div></div>
+          </div>
+          <div class="card" id="inv-alertas-card" style="display:none">
+            <div class="card-title">⚠️ Alertas financieras</div>
+            <div id="inv-alertas-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Análisis de escenarios</div>
+            <div id="inv-escenarios"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- GRÁFICAS -->
+      <div class="grid2" style="margin-bottom:20px">
+        <div class="card">
+          <div class="card-title">Crecimiento del capital</div>
+          <div class="chart-box" style="height:260px">
+            <canvas id="chartInvCrecimiento">Crecimiento del capital</canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Comparación de escenarios</div>
+          <div class="chart-box" style="height:260px">
+            <canvas id="chartInvEscenarios">Escenarios</canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- FLUJO DE CAJA (solo negocio) -->
+      <div class="card" id="inv-flujo-card" style="display:none;margin-bottom:20px">
+        <div class="card-title">Flujo de caja proyectado</div>
+        <div class="chart-box" style="height:240px">
+          <canvas id="chartInvFlujo">Flujo de caja</canvas>
+        </div>
+      </div>
+
+      <!-- TABLA PROYECCIÓN -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">Tabla de proyección detallada</div>
+        <div class="proj-table-wrap" style="max-height:380px">
+          <table>
+            <thead>
+              <tr id="inv-tabla-head">
+                <th>#</th><th>Período</th><th>Capital</th><th>Rendimiento</th><th>Acumulado</th><th>Real (inflación)</th>
+              </tr>
+            </thead>
+            <tbody id="inv-tabla-body">
+              <tr><td colspan="6"><div class="empty"><div class="empty-text">Sin datos aún</div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- COMPARADOR -->
+      <!-- INVERSIONES GUARDADAS -->
+      <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div class="card-title" style="margin-bottom:0">💾 Inversiones guardadas</div>
+          <button class="btn btn-ghost btn-sm" onclick="exportarTodasPDF()">📄 Exportar todas</button>
+        </div>
+        <div id="inv-guardadas-lista">
+          <div class="empty"><div class="empty-icon">💾</div><div class="empty-text">Guarda una simulación para verla aquí</div></div>
+        </div>
+      </div>
+
+      <div class="card" id="inv-comparador-card" style="display:none">
+        <div class="card-title">Comparador de inversiones</div>
+        <div id="inv-comparador-lista" style="overflow-x:auto"></div>
+        <button class="btn btn-danger btn-sm" style="margin-top:12px" onclick="limpiarComparador()">🗑 Limpiar comparador</button>
       </div>
     </div>
 
@@ -1758,7 +2060,7 @@ function loadState() {
 // ============================
 const PANEL_TITLES = {
   dashboard: 'Dashboard', 'alertas-config': '🔔 Alertas de vencimiento', nube: 'Nube — Sync', ingresos: 'Ingresos', gastos: 'Gastos',
-  deudas: 'Deudas & Créditos', simulador: 'Simulador de Metas', proyecciones: 'Proyecciones', ahorro: 'Ahorro & Inversión'
+  deudas: 'Deudas & Créditos', simulador: 'Simulador de Metas', proyecciones: 'Proyecciones', ahorro: 'Ahorro', inversion: 'Calculadora de Inversiones'
 };
 
 function showPanel(name) {
@@ -1774,11 +2076,12 @@ function showPanel(name) {
   const addBtnLabels = { dashboard: '+ Agregar', ingresos: '+ Ingreso', gastos: '+ Gasto', deudas: '+ Deuda', simulador: '+ Simulación', proyecciones: '', ahorro: '+ Meta' };
   const btn = document.getElementById('topbar-add-btn');
   btn.textContent = addBtnLabels[name] || '+ Agregar';
-  btn.style.display = (name === 'proyecciones' || name === 'nube' || name === 'alertas-config') ? 'none' : '';
+  btn.style.display = (name === 'proyecciones' || name === 'nube' || name === 'alertas-config' || name === 'inversion') ? 'none' : '';
   if (name === 'deudas') renderDeudas();
   if (name === 'ingresos') renderIngresos();
   if (name === 'gastos') renderGastos();
   if (name === 'nube') loadNubePanel();
+  if (name === 'inversion') { setTipoInversion(inversionTipo); renderInvGuardadas(); }
   if (name === 'alertas-config') loadAlertasPanel();
   if (name === 'dashboard') renderDashboard();
   if (name === 'proyecciones') updateProjections();
@@ -3947,8 +4250,993 @@ async function enviarAlertasAhora() {
   alert(`✓ ${enviados} alerta(s) enviada(s) a ${email}${errores > 0 ? `. ${errores} error(es).` : '.'}`);
 }
 
+
+
 // ============================
-// EXPORTAR
+// CALCULADORA DE INVERSIONES
+// ============================
+let inversionTipo = 'cdt';
+let invComparador = [];
+
+function setTipoInversion(tipo) {
+  inversionTipo = tipo;
+  document.querySelectorAll('.inv-tipo-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('itb-' + tipo).classList.add('active');
+  document.querySelectorAll('.inv-seccion').forEach(s => s.style.display = 'none');
+  document.getElementById('inv-sec-' + tipo).style.display = 'block';
+  const flujoCard = document.getElementById('inv-flujo-card');
+  if (flujoCard) flujoCard.style.display = tipo === 'negocio' ? 'block' : 'none';
+  calcularInversion();
+}
+
+// ── Helpers matemáticos ────────────────────────────────────────────────────────
+function eaMensual(ea) { return Math.pow(1 + ea / 100, 1/12) - 1; }
+
+function calcularTIR(flujos, iter = 1000) {
+  // Newton-Raphson TIR mensual
+  let r = 0.01;
+  for (let i = 0; i < iter; i++) {
+    let f = 0, df = 0;
+    flujos.forEach((c, t) => {
+      f  += c / Math.pow(1 + r, t);
+      df -= t * c / Math.pow(1 + r, t + 1);
+    });
+    if (Math.abs(df) < 1e-10) break;
+    const nr = r - f / df;
+    if (Math.abs(nr - r) < 1e-8) { r = nr; break; }
+    r = nr;
+  }
+  return r;
+}
+
+function calcularVAN(flujos, tasa) {
+  return flujos.reduce((s, c, t) => s + c / Math.pow(1 + tasa, t), 0);
+}
+
+function calcularPayback(flujos) {
+  let acum = 0;
+  for (let i = 0; i < flujos.length; i++) {
+    acum += flujos[i];
+    if (acum >= 0) return i;
+  }
+  return null;
+}
+
+function sharpeRatio(retorno, volatilidad, tasaLibreRiesgo = 5) {
+  return (retorno - tasaLibreRiesgo) / volatilidad;
+}
+
+// ── Calcular según tipo ────────────────────────────────────────────────────────
+function calcularInversion() {
+  const capital    = parseFloat(document.getElementById('inv-capital')?.value) || 0;
+  const aportes    = parseFloat(document.getElementById('inv-aportes')?.value) || 0;
+  const horizonte  = parseInt(document.getElementById('inv-horizonte')?.value)  || 36;
+  const inflacion  = parseFloat(document.getElementById('inv-inflacion')?.value) || 5.8;
+  const impuestos  = parseFloat(document.getElementById('inv-impuestos')?.value) || 19;
+  const perfil     = document.getElementById('inv-perfil')?.value || 'moderado';
+  if (!capital && inversionTipo !== 'negocio') return;
+
+  let resultado = {};
+  switch (inversionTipo) {
+    case 'cdt':      resultado = calcCDT(capital, aportes, horizonte, inflacion, impuestos); break;
+    case 'acciones': resultado = calcAcciones(capital, aportes, horizonte, inflacion, impuestos, perfil); break;
+    case 'fondos':   resultado = calcFondos(capital, aportes, horizonte, inflacion, impuestos); break;
+    case 'negocio':  resultado = calcNegocio(horizonte, inflacion, impuestos); break;
+  }
+
+  if (resultado.filas) {
+    invGuardadasActuales = resultado;
+    renderInvKPIs(resultado);
+    renderInvAlertas(resultado, inflacion, perfil);
+    renderInvEscenarios(resultado);
+    renderInvTabla(resultado.filas, resultado.tipo);
+    renderChartCrecimiento(resultado.filas, resultado.escenarios);
+    renderChartEscenarios(resultado.escenarios, horizonte);
+    if (inversionTipo === 'negocio' && resultado.flujoMensual) {
+      renderChartFlujo(resultado.flujoMensual);
+    }
+  }
+}
+
+// ── CDT / RENTA FIJA ──────────────────────────────────────────────────────────
+function calcCDT(capital, aportes, meses, inflacion, impuestos) {
+  const tasa    = parseFloat(document.getElementById('cdt-tasa')?.value) || 0;
+  const tipoInt = document.getElementById('cdt-tipo')?.value || 'compuesto';
+  const tm      = eaMensual(tasa);
+  const tmInf   = eaMensual(inflacion);
+
+  const filas = [];
+  let acum = capital, acumReal = capital;
+  let interesTotal = 0;
+
+  for (let m = 1; m <= meses; m++) {
+    let interesMes;
+    if (tipoInt === 'compuesto') interesMes = acum * tm;
+    else interesMes = capital * (tasa / 100 / 12);
+    const impMes = interesMes * (impuestos / 100);
+    const netaMes = interesMes - impMes;
+    acum += aportes + netaMes;
+    interesTotal += netaMes;
+    acumReal = acum / Math.pow(1 + tmInf, m);
+    filas.push({ m, capital: Math.round(acum), rendimiento: Math.round(netaMes), acumulado: Math.round(acum), real: Math.round(acumReal), interesTotal: Math.round(interesTotal) });
+  }
+
+  const fv = filas[meses - 1]?.acumulado || 0;
+  const ganancia = fv - capital - aportes * meses;
+  const roi = capital > 0 ? (ganancia / (capital + aportes * meses)) * 100 : 0;
+  const taEfectiva = tasa * (1 - impuestos / 100);
+  const tasaReal = ((1 + taEfectiva / 100) / (1 + inflacion / 100) - 1) * 100;
+  const flujos = [-capital, ...filas.map(f => f.rendimiento + aportes)];
+  flujos[flujos.length - 1] += capital;
+  const van = calcularVAN(flujos, tm);
+  const tir = calcularTIR(flujos) * 12 * 100;
+
+  // Escenarios
+  const escenarios = ['pesimista', 'base', 'optimista'].map((sc, i) => {
+    const delta = (i - 1) * 2;
+    const t2 = Math.max(0, tasa + delta);
+    const tm2 = eaMensual(t2);
+    let a2 = capital;
+    const serie = [capital];
+    for (let m = 1; m <= meses; m++) {
+      a2 += a2 * tm2 * (1 - impuestos / 100) + aportes;
+      serie.push(Math.round(a2));
+    }
+    return { nombre: sc, final: Math.round(a2), serie, tasa: t2 };
+  });
+
+  return { tipo: 'cdt', fv, ganancia, roi, tasaReal, van, tir, taEfectiva, filas, escenarios };
+}
+
+// ── ACCIONES / ETFs ───────────────────────────────────────────────────────────
+function calcAcciones(capital, aportes, meses, inflacion, impuestos, perfil) {
+  const retorno     = parseFloat(document.getElementById('acc-retorno')?.value) || 12;
+  const volatilidad = parseFloat(document.getElementById('acc-volatilidad')?.value) || 20;
+  const dividendos  = parseFloat(document.getElementById('acc-dividendos')?.value) || 2;
+  const reinvertir  = document.getElementById('acc-reinvertir')?.value === 'si';
+
+  const tm     = eaMensual(retorno);
+  const tmDiv  = eaMensual(dividendos);
+  const tmInf  = eaMensual(inflacion);
+
+  const filas = [];
+  let acum = capital;
+
+  for (let m = 1; m <= meses; m++) {
+    const ganMes = acum * tm;
+    const divMes = acum * tmDiv;
+    const divNeto = divMes * (1 - impuestos / 100);
+    if (reinvertir) acum += ganMes + divMes + aportes;
+    else acum += ganMes + aportes;
+    const real = acum / Math.pow(1 + tmInf, m);
+    filas.push({ m, capital: Math.round(acum), rendimiento: Math.round(ganMes + (reinvertir ? divMes : divNeto)), acumulado: Math.round(acum), real: Math.round(real) });
+  }
+
+  const fv = filas[meses - 1]?.acumulado || 0;
+  const ganancia = fv - capital - aportes * meses;
+  const roi = (ganancia / (capital + aportes * meses)) * 100;
+  const tasaReal = ((1 + retorno / 100) / (1 + inflacion / 100) - 1) * 100;
+  const sharpe   = sharpeRatio(retorno, volatilidad);
+  const flujos   = [-capital, ...filas.map(f => f.rendimiento + aportes)];
+  flujos[flujos.length - 1] += capital;
+  const van = calcularVAN(flujos, tm);
+  const tir = calcularTIR(flujos) * 12 * 100;
+
+  const escDelta = volatilidad / 100 * 0.8;
+  const escenarios = ['pesimista', 'base', 'optimista'].map((sc, i) => {
+    const r = retorno + (i - 1) * escDelta * 100;
+    const t2 = eaMensual(Math.max(0, r));
+    let a2 = capital;
+    const serie = [capital];
+    for (let m = 1; m <= meses; m++) { a2 += a2 * t2 + aportes; serie.push(Math.round(a2)); }
+    return { nombre: sc, final: Math.round(a2), serie, tasa: r };
+  });
+
+  return { tipo: 'acciones', fv, ganancia, roi, tasaReal, van, tir, sharpe, volatilidad, retorno, filas, escenarios };
+}
+
+// ── FONDOS ────────────────────────────────────────────────────────────────────
+function calcFondos(capital, aportes, meses, inflacion, impuestos) {
+  const rent    = parseFloat(document.getElementById('fon-rentabilidad')?.value) || 10;
+  const comision = parseFloat(document.getElementById('fon-comision')?.value) || 1.5;
+  const rentNeta = rent - comision;
+  const tm     = eaMensual(rentNeta);
+  const tmBruto = eaMensual(rent);
+  const tmInf  = eaMensual(inflacion);
+
+  const filas = [];
+  let acum = capital, acumBruto = capital;
+
+  for (let m = 1; m <= meses; m++) {
+    acum += acum * tm + aportes;
+    acumBruto += acumBruto * tmBruto + aportes;
+    const real = acum / Math.pow(1 + tmInf, m);
+    filas.push({ m, capital: Math.round(acum), rendimiento: Math.round(acum * tm), acumulado: Math.round(acum), real: Math.round(real), bruto: Math.round(acumBruto) });
+  }
+
+  const fv = filas[meses - 1]?.acumulado || 0;
+  const fvBruto = filas[meses - 1]?.bruto || 0;
+  const ganancia = fv - capital - aportes * meses;
+  const roi = (ganancia / (capital + aportes * meses)) * 100;
+  const tasaReal = ((1 + rentNeta / 100) / (1 + inflacion / 100) - 1) * 100;
+  const impactoComision = fvBruto - fv;
+  const flujos = [-capital, ...filas.map(f => f.rendimiento + aportes)];
+  flujos[flujos.length - 1] += capital;
+  const van = calcularVAN(flujos, tm);
+  const tir = calcularTIR(flujos) * 12 * 100;
+
+  const escenarios = ['pesimista', 'base', 'optimista'].map((sc, i) => {
+    const r = Math.max(0, rentNeta + (i - 1) * 2);
+    const t2 = eaMensual(r);
+    let a2 = capital;
+    const serie = [capital];
+    for (let m = 1; m <= meses; m++) { a2 += a2 * t2 + aportes; serie.push(Math.round(a2)); }
+    return { nombre: sc, final: Math.round(a2), serie, tasa: r };
+  });
+
+  return { tipo: 'fondos', fv, ganancia, roi, tasaReal, van, tir, impactoComision, comision, rent, rentNeta, filas, escenarios };
+}
+
+// ── CAPEX / OPEX CALCULATOR ───────────────────────────────────────────────────
+let capexItems = [];
+let opexItems  = [];
+let ingresosItems = [];
+
+const PLANTILLAS = {
+  empanadas: {
+    capex: [
+      { nombre: 'Freidora industrial', monto: 800000 },
+      { nombre: 'Mesas y sillas (6 puestos)', monto: 600000 },
+      { nombre: 'Vitrina exhibidora', monto: 400000 },
+      { nombre: 'Utensilios de cocina', monto: 300000 },
+      { nombre: 'Adecuación local', monto: 1500000 },
+      { nombre: 'Licencias y permisos', monto: 400000 },
+      { nombre: 'Capital de trabajo inicial', monto: 500000 },
+    ],
+    opex: [
+      { nombre: 'Arriendo local', monto: 800000 },
+      { nombre: 'Ingredientes (masa, relleno)', monto: 900000 },
+      { nombre: 'Mano de obra (1 empleado)', monto: 1300000 },
+      { nombre: 'Servicios (agua, luz, gas)', monto: 200000 },
+      { nombre: 'Empaque y desechables', monto: 120000 },
+      { nombre: 'Publicidad local', monto: 100000 },
+    ],
+    ingresos: [
+      { nombre: 'Venta empanadas (ej: 100 diarias x $2.500 x 26 días)', monto: 6500000 },
+    ],
+    crecimiento: 12
+  },
+  cafeteria: {
+    capex: [
+      { nombre: 'Máquina de café espresso', monto: 3500000 },
+      { nombre: 'Nevera y refrigeración', monto: 1800000 },
+      { nombre: 'Muebles y decoración', monto: 2000000 },
+      { nombre: 'Adecuación local', monto: 2500000 },
+      { nombre: 'Licuadoras y utensilios', monto: 600000 },
+      { nombre: 'Capital inicial inventario', monto: 1000000 },
+    ],
+    opex: [
+      { nombre: 'Arriendo', monto: 1500000 },
+      { nombre: 'Café e insumos', monto: 800000 },
+      { nombre: 'Mano de obra (2 personas)', monto: 2600000 },
+      { nombre: 'Servicios públicos', monto: 300000 },
+      { nombre: 'Marketing digital', monto: 200000 },
+    ],
+    ingresos: [
+      { nombre: 'Bebidas calientes', monto: 3000000 },
+      { nombre: 'Bebidas frías', monto: 1500000 },
+      { nombre: 'Alimentos (snacks, pasteles)', monto: 1000000 },
+    ],
+    crecimiento: 15
+  },
+  impresora3d: {
+    capex: [
+      { nombre: 'Impresora 3D (ej: Bambu Lab X1)', monto: 4500000 },
+      { nombre: 'Filamentos (stock inicial)', monto: 500000 },
+      { nombre: 'Herramientas de post-proceso', monto: 300000 },
+      { nombre: 'Computador y software', monto: 1200000 },
+    ],
+    opex: [
+      { nombre: 'Filamentos mensuales', monto: 400000 },
+      { nombre: 'Electricidad', monto: 80000 },
+      { nombre: 'Plataformas (Etsy, MercadoLibre)', monto: 60000 },
+      { nombre: 'Empaque y envíos', monto: 150000 },
+    ],
+    ingresos: [
+      { nombre: 'Venta piezas personalizadas', monto: 1500000 },
+      { nombre: 'Prototipos para empresas', monto: 800000 },
+    ],
+    crecimiento: 20
+  },
+  ecommerce: {
+    capex: [
+      { nombre: 'Inventario inicial', monto: 3000000 },
+      { nombre: 'Desarrollo tienda online', monto: 1500000 },
+      { nombre: 'Fotografía de productos', monto: 500000 },
+      { nombre: 'Marca y diseño', monto: 700000 },
+    ],
+    opex: [
+      { nombre: 'Plataforma e-commerce', monto: 150000 },
+      { nombre: 'Publicidad digital (Meta/Google)', monto: 800000 },
+      { nombre: 'Logística y envíos', monto: 600000 },
+      { nombre: 'Reposición inventario', monto: 1500000 },
+    ],
+    ingresos: [
+      { nombre: 'Ventas online', monto: 4000000 },
+    ],
+    crecimiento: 25
+  }
+};
+
+function cargarPlantilla(nombre) {
+  const p = PLANTILLAS[nombre];
+  if (!p) return;
+  capexItems    = p.capex.map((i, idx) => ({ id: 'cx' + idx, ...i }));
+  opexItems     = p.opex.map((i, idx)  => ({ id: 'ox' + idx, ...i }));
+  ingresosItems = p.ingresos.map((i, idx) => ({ id: 'ix' + idx, ...i }));
+  const crecEl = document.getElementById('neg-crecimiento');
+  if (crecEl) crecEl.value = p.crecimiento;
+  renderItemsCAPEX(); renderItemsOPEX(); renderItemsIngresos();
+  calcularInversion();
+}
+
+function limpiarNegocio() {
+  capexItems = []; opexItems = []; ingresosItems = [];
+  renderItemsCAPEX(); renderItemsOPEX(); renderItemsIngresos();
+  calcularInversion();
+}
+
+function sumarItems(items) { return items.reduce((s, i) => s + (parseFloat(i.monto) || 0), 0); }
+
+function renderItemRow(item, lista, onDelete, onInput) {
+  return `<div class="capex-item" id="row-${item.id}">
+    <input type="text" value="${item.nombre}" placeholder="Concepto" oninput="actualizarNombreItem('${lista}','${item.id}',this.value)">
+    <input type="number" value="${item.monto}" placeholder="0" min="0" step="10000" oninput="actualizarMontoItem('${lista}','${item.id}',this.value)">
+    <button class="btn-icon" style="color:var(--red)" onclick="eliminarItem('${lista}','${item.id}')">✕</button>
+  </div>`;
+}
+
+function renderItemsCAPEX() {
+  const el = document.getElementById('capex-items-list');
+  if (!el) return;
+  el.innerHTML = capexItems.map(i => renderItemRow(i, 'capex')).join('');
+  const total = sumarItems(capexItems);
+  document.getElementById('capex-total-display').textContent = fmt(total);
+  const hidden = document.getElementById('neg-capex');
+  if (hidden) hidden.value = total;
+  actualizarMargen();
+}
+
+function renderItemsOPEX() {
+  const el = document.getElementById('opex-items-list');
+  if (!el) return;
+  el.innerHTML = opexItems.map(i => renderItemRow(i, 'opex')).join('');
+  const total = sumarItems(opexItems);
+  document.getElementById('opex-total-display').textContent = fmt(total);
+  const hidden = document.getElementById('neg-opex');
+  if (hidden) hidden.value = total;
+  actualizarMargen();
+}
+
+function renderItemsIngresos() {
+  const el = document.getElementById('ingresos-items-list');
+  if (!el) return;
+  el.innerHTML = ingresosItems.map(i => renderItemRow(i, 'ingresos')).join('');
+  const total = sumarItems(ingresosItems);
+  document.getElementById('ingresos-total-display').textContent = fmt(total);
+  const hidden = document.getElementById('neg-ingresos');
+  if (hidden) hidden.value = total;
+  actualizarMargen();
+}
+
+function actualizarMargen() {
+  const ingresos = sumarItems(ingresosItems);
+  const opex     = sumarItems(opexItems);
+  const margen   = ingresos > 0 ? ((ingresos - opex) / ingresos * 100) : 0;
+  const margenEl = document.getElementById('neg-margen-display');
+  if (!margenEl) return;
+  const color = margen >= 30 ? 'var(--green)' : margen >= 10 ? 'var(--amber)' : 'var(--red)';
+  margenEl.innerHTML = `<span style="color:${color};font-weight:700">${fmtDec(margen,1)}%</span> <span style="color:var(--text3);font-size:11px">(${fmt(ingresos - opex)}/mes)</span>`;
+  calcularInversion();
+}
+
+function actualizarNombreItem(lista, id, val) {
+  const arr = lista === 'capex' ? capexItems : lista === 'opex' ? opexItems : ingresosItems;
+  const item = arr.find(i => i.id === id);
+  if (item) item.nombre = val;
+}
+
+function actualizarMontoItem(lista, id, val) {
+  const arr = lista === 'capex' ? capexItems : lista === 'opex' ? opexItems : ingresosItems;
+  const item = arr.find(i => i.id === id);
+  if (item) { item.monto = parseFloat(val) || 0; }
+  if (lista === 'capex') renderItemsCAPEX();
+  else if (lista === 'opex') renderItemsOPEX();
+  else renderItemsIngresos();
+}
+
+function eliminarItem(lista, id) {
+  if (lista === 'capex')    { capexItems    = capexItems.filter(i => i.id !== id); renderItemsCAPEX(); }
+  else if (lista === 'opex') { opexItems    = opexItems.filter(i => i.id !== id);  renderItemsOPEX(); }
+  else                       { ingresosItems = ingresosItems.filter(i => i.id !== id); renderItemsIngresos(); }
+}
+
+function agregarItemCAPEX()    { capexItems.push({ id: 'cx' + Date.now(), nombre: '', monto: 0 }); renderItemsCAPEX(); }
+function agregarItemOPEX()     { opexItems.push({  id: 'ox' + Date.now(), nombre: '', monto: 0 }); renderItemsOPEX(); }
+function agregarItemIngreso()  { ingresosItems.push({ id: 'ix' + Date.now(), nombre: '', monto: 0 }); renderItemsIngresos(); }
+
+// ── ACTIVO PRODUCTIVO ─────────────────────────────────────────────────────────
+function calcNegocio(meses, inflacion, impuestos) {
+  const capex      = parseFloat(document.getElementById('neg-capex')?.value) || 0;
+  const opex       = parseFloat(document.getElementById('neg-opex')?.value) || 0;
+  const ingresos   = parseFloat(document.getElementById('neg-ingresos')?.value) || 0;
+  const crecimiento = parseFloat(document.getElementById('neg-crecimiento')?.value) || 10;
+  const tmCrec     = eaMensual(crecimiento);
+  const tmInf      = eaMensual(inflacion);
+  const capital    = parseFloat(document.getElementById('inv-capital')?.value) || capex;
+
+  const flujosMensuales = [];
+  const filas = [];
+  let acumFlujo = -capex;
+  let payback = null;
+
+  for (let m = 1; m <= meses; m++) {
+    const ingMes = ingresos * Math.pow(1 + tmCrec, m);
+    const opexMes = opex * Math.pow(1 + tmInf, m);
+    const flujoBruto = ingMes - opexMes;
+    const impMes = Math.max(0, flujoBruto * (impuestos / 100));
+    const flujoNeto = flujoBruto - impMes;
+    acumFlujo += flujoNeto;
+    if (payback === null && acumFlujo >= 0) payback = m;
+    const real = acumFlujo / Math.pow(1 + tmInf, m);
+    flujosMensuales.push(Math.round(flujoNeto));
+    filas.push({ m, capital: Math.round(ingMes), rendimiento: Math.round(flujoNeto), acumulado: Math.round(acumFlujo), real: Math.round(real) });
+  }
+
+  const fv = filas[meses - 1]?.acumulado || 0;
+  const ganancia = fv + capex; // net after recovering capex
+  const roi = capex > 0 ? (ganancia / capex) * 100 : 0;
+  const tasaReal = inflacion;
+  const puntoEquilibrio = opex > 0 && (ingresos - opex) > 0 ? capex / (ingresos - opex) : null;
+
+  const todosFlujos = [-capex, ...flujosMensuales];
+  const van = calcularVAN(todosFlujos, eaMensual(10));
+  let tir = 0;
+  try { tir = calcularTIR(todosFlujos) * 12 * 100; } catch(e) {}
+
+  const escenarios = ['pesimista', 'base', 'optimista'].map((sc, i) => {
+    const factorIng = [0.7, 1, 1.3][i];
+    const factorOp  = [1.2, 1, 0.85][i];
+    let a2 = -capex;
+    const serie = [0];
+    for (let m = 1; m <= meses; m++) {
+      const ing2 = ingresos * factorIng * Math.pow(1 + tmCrec, m);
+      const op2  = opex * factorOp * Math.pow(1 + tmInf, m);
+      a2 += (ing2 - op2) * (1 - impuestos / 100);
+      serie.push(Math.round(a2));
+    }
+    return { nombre: sc, final: Math.round(a2), serie, tasa: 0 };
+  });
+
+  return { tipo: 'negocio', fv, ganancia, roi, tasaReal, van, tir, payback, puntoEquilibrio, flujoMensual: flujosMensuales, capex, ingresos, opex, filas, escenarios };
+}
+
+// ── Render KPIs ───────────────────────────────────────────────────────────────
+function fmtPct(n, d=2) { return isFinite(n) ? n.toFixed(d) + '%' : '—'; }
+
+function renderInvKPIs(r) {
+  const kpis = [];
+  kpis.push({ label: 'Valor futuro', val: fmt(r.fv), color: 'var(--green)' });
+  kpis.push({ label: 'Ganancia total', val: fmt(r.ganancia), color: r.ganancia >= 0 ? 'var(--green)' : 'var(--red)' });
+  kpis.push({ label: 'ROI', val: fmtPct(r.roi), color: r.roi >= 0 ? 'var(--accent)' : 'var(--red)' });
+  kpis.push({ label: 'Rentabilidad real', val: fmtPct(r.tasaReal), color: r.tasaReal >= 0 ? 'var(--teal)' : 'var(--red)' });
+  kpis.push({ label: 'VAN', val: fmt(r.van), color: r.van >= 0 ? 'var(--green)' : 'var(--red)' });
+  kpis.push({ label: 'TIR anual', val: fmtPct(r.tir), color: 'var(--amber)' });
+
+  if (r.tipo === 'acciones' && r.sharpe !== undefined)
+    kpis.push({ label: 'Sharpe ratio', val: fmtDec(r.sharpe, 2), color: r.sharpe >= 1 ? 'var(--green)' : r.sharpe >= 0 ? 'var(--amber)' : 'var(--red)' });
+  if (r.tipo === 'fondos' && r.impactoComision !== undefined)
+    kpis.push({ label: 'Costo comisiones', val: '-' + fmt(r.impactoComision), color: 'var(--red)' });
+  if (r.tipo === 'negocio') {
+    if (r.payback !== null) kpis.push({ label: 'Payback', val: r.payback + ' meses', color: 'var(--amber)' });
+    if (r.puntoEquilibrio !== null) kpis.push({ label: 'Punto equilibrio', val: Math.ceil(r.puntoEquilibrio) + ' meses', color: 'var(--teal)' });
+  }
+
+  document.getElementById('inv-kpis').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      ${kpis.map(k => `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">${k.label}</div>
+        <div style="font-family:var(--font-head);font-size:15px;font-weight:700;color:${k.color}">${k.val}</div>
+      </div>`).join('')}
+    </div>`;
+}
+
+function renderInvAlertas(r, inflacion, perfil) {
+  const alertas = [];
+  if (r.tasaReal < 0) alertas.push({ tipo: 'danger', msg: '🔴 Rentabilidad real negativa — la inflación supera tu rendimiento' });
+  if (r.roi < 0) alertas.push({ tipo: 'danger', msg: '🔴 ROI negativo — perderías dinero en este escenario' });
+  if (r.van < 0) alertas.push({ tipo: 'warning', msg: '⚠️ VAN negativo — el proyecto no crea valor a la tasa de descuento usada' });
+  if (r.tipo === 'acciones') {
+    const perfilMax = { conservador: 10, moderado: 20, agresivo: 40 };
+    if (r.volatilidad > perfilMax[perfil]) alertas.push({ tipo: 'warning', msg: `⚠️ Volatilidad (${r.volatilidad}%) alta para perfil ${perfil}` });
+    if (r.sharpe < 0) alertas.push({ tipo: 'warning', msg: '⚠️ Sharpe ratio negativo — rendimiento insuficiente vs riesgo asumido' });
+  }
+  if (r.tipo === 'negocio' && r.payback === null) alertas.push({ tipo: 'danger', msg: '🔴 Payback no se alcanza en el horizonte — inversión no se recupera' });
+  if (r.tir < inflacion) alertas.push({ tipo: 'warning', msg: `⚠️ TIR (${fmtPct(r.tir)}) menor que inflación (${inflacion}%)` });
+
+  const card = document.getElementById('inv-alertas-card');
+  const lista = document.getElementById('inv-alertas-list');
+  if (!alertas.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  lista.innerHTML = alertas.map(a => `<div class="alert alert-${a.tipo}" style="margin-bottom:6px"><span>${a.msg}</span></div>`).join('');
+}
+
+function renderInvEscenarios(r) {
+  const labels = { pesimista: '🔴 Pesimista', base: '🟡 Base', optimista: '🟢 Optimista' };
+  const colors = { pesimista: 'var(--red)', base: 'var(--amber)', optimista: 'var(--green)' };
+  document.getElementById('inv-escenarios').innerHTML = r.escenarios.map(sc => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:13px;color:var(--text2)">${labels[sc.nombre] || sc.nombre}</span>
+      <span style="font-family:var(--font-head);font-size:14px;font-weight:700;color:${colors[sc.nombre]}">${fmt(sc.final)}</span>
+    </div>`).join('');
+}
+
+function renderInvTabla(filas, tipo) {
+  const head = document.getElementById('inv-tabla-head');
+  const body = document.getElementById('inv-tabla-body');
+  const extraCol = tipo === 'negocio' ? 'Flujo neto' : 'Rendimiento';
+  head.innerHTML = `<th>#</th><th>Mes</th><th>${tipo === 'negocio' ? 'Ingresos' : 'Capital'}</th><th>${extraCol}</th><th>Acumulado</th><th>Real (vs inflación)</th>`;
+  body.innerHTML = filas.map((f, i) => {
+    const isYr = f.m % 12 === 0;
+    return `<tr class="${isYr ? 'yr-row' : ''}">
+      <td style="color:var(--text3)">${f.m}</td>
+      <td>${getMonthName(f.m)}${isYr ? ` <span style="background:var(--accent);color:white;font-size:9px;padding:1px 5px;border-radius:3px">AÑO ${f.m/12}</span>` : ''}</td>
+      <td class="pos">${fmt(f.capital)}</td>
+      <td style="color:var(--teal)">${fmt(f.rendimiento)}</td>
+      <td class="accent">${fmt(f.acumulado)}</td>
+      <td style="color:${f.real < f.acumulado ? 'var(--amber)' : 'var(--green)'}">${fmt(f.real)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Gráficas ──────────────────────────────────────────────────────────────────
+function renderChartCrecimiento(filas, escenarios) {
+  destroyChart('invCrec');
+  const labels = filas.map(f => f.m % 6 === 0 ? getMonthName(f.m) : '');
+  charts.invCrec = new Chart(document.getElementById('chartInvCrecimiento'), {
+    type: 'line',
+    data: {
+      labels: filas.map(f => getMonthName(f.m)),
+      datasets: [
+        { label: 'Acumulado nominal', data: filas.map(f => f.acumulado), borderColor: '#4f7fff', backgroundColor: 'rgba(79,127,255,0.1)', borderWidth: 2, pointRadius: 0, tension: 0.4, fill: true },
+        { label: 'Acumulado real', data: filas.map(f => f.real), borderColor: '#2dd4bf', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0.4, borderDash: [5,3] }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#9aa0b8', font: { size: 11 }, boxWidth: 12 } }, tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)}` } } },
+      scales: { x: { ticks: { color: '#9aa0b8', font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.04)' } }, y: { ticks: { color: '#9aa0b8', callback: v => fmt(v), font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } } }
+    }
+  });
+}
+
+function renderChartEscenarios(escenarios, meses) {
+  destroyChart('invEsc');
+  const colores = { pesimista: '#ff6b6b', base: '#fbbf24', optimista: '#36d399' };
+  const labels = Array.from({ length: meses + 1 }, (_, i) => i % 6 === 0 ? getMonthName(i) : '');
+  charts.invEsc = new Chart(document.getElementById('chartInvEscenarios'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: escenarios.map(sc => ({
+        label: sc.nombre.charAt(0).toUpperCase() + sc.nombre.slice(1),
+        data: sc.serie,
+        borderColor: colores[sc.nombre] || '#4f7fff',
+        backgroundColor: 'transparent',
+        borderWidth: 2, pointRadius: 0, tension: 0.4
+      }))
+    },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#9aa0b8', font: { size: 11 }, boxWidth: 12 } }, tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)}` } } },
+      scales: { x: { ticks: { color: '#9aa0b8', font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.04)' } }, y: { ticks: { color: '#9aa0b8', callback: v => fmt(v), font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } } }
+    }
+  });
+}
+
+function renderChartFlujo(flujos) {
+  destroyChart('invFlujo');
+  charts.invFlujo = new Chart(document.getElementById('chartInvFlujo'), {
+    type: 'bar',
+    data: {
+      labels: flujos.map((_, i) => getMonthName(i + 1)),
+      datasets: [{ label: 'Flujo neto mensual', data: flujos,
+        backgroundColor: flujos.map(v => v >= 0 ? 'rgba(54,211,153,0.6)' : 'rgba(255,107,107,0.6)'),
+        borderColor: flujos.map(v => v >= 0 ? '#36d399' : '#ff6b6b'),
+        borderWidth: 1, borderRadius: 3 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)}` } } },
+      scales: { x: { ticks: { color: '#9aa0b8', font: { size: 10 }, maxTicksLimit: 12 }, grid: { display: false } }, y: { ticks: { color: '#9aa0b8', callback: v => fmt(v), font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } } }
+    }
+  });
+}
+
+// ── Comparador ────────────────────────────────────────────────────────────────
+function agregarAlComparador() {
+  const capital   = parseFloat(document.getElementById('inv-capital')?.value) || 0;
+  const horizonte = parseInt(document.getElementById('inv-horizonte')?.value) || 36;
+  const inflacion = parseFloat(document.getElementById('inv-inflacion')?.value) || 5.8;
+  const impuestos = parseFloat(document.getElementById('inv-impuestos')?.value) || 19;
+  const perfil    = document.getElementById('inv-perfil')?.value || 'moderado';
+  const tipoLabels = { cdt: '📜 CDT', acciones: '📈 Acciones', fondos: '🏛️ Fondo', negocio: '🏭 Negocio' };
+
+  let r = {};
+  switch (inversionTipo) {
+    case 'cdt':      r = calcCDT(capital, 0, horizonte, inflacion, impuestos); break;
+    case 'acciones': r = calcAcciones(capital, 0, horizonte, inflacion, impuestos, perfil); break;
+    case 'fondos':   r = calcFondos(capital, 0, horizonte, inflacion, impuestos); break;
+    case 'negocio':  r = calcNegocio(horizonte, inflacion, impuestos); break;
+  }
+
+  if (!r.fv) { alert('Completa los datos primero'); return; }
+  invComparador.push({ tipo: tipoLabels[inversionTipo], fv: r.fv, ganancia: r.ganancia, roi: r.roi, tir: r.tir, van: r.van, tasaReal: r.tasaReal });
+  renderComparador();
+}
+
+function renderComparador() {
+  const card = document.getElementById('inv-comparador-card');
+  if (!invComparador.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  document.getElementById('inv-comparador-lista').innerHTML = `
+    <table style="width:100%">
+      <thead><tr><th>Tipo</th><th>Valor futuro</th><th>Ganancia</th><th>ROI</th><th>TIR</th><th>VAN</th><th>Tasa real</th></tr></thead>
+      <tbody>${invComparador.map(c => `<tr>
+        <td style="color:var(--text);font-weight:600">${c.tipo}</td>
+        <td class="pos">${fmt(c.fv)}</td>
+        <td class="${c.ganancia >= 0 ? 'pos' : 'neg'}">${fmt(c.ganancia)}</td>
+        <td style="color:var(--accent)">${fmtPct(c.roi)}</td>
+        <td style="color:var(--amber)">${fmtPct(c.tir)}</td>
+        <td class="${c.van >= 0 ? 'pos' : 'neg'}">${fmt(c.van)}</td>
+        <td style="color:${c.tasaReal >= 0 ? 'var(--teal)' : 'var(--red)'}">${fmtPct(c.tasaReal)}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+// ── GUARDAR INVERSIONES ───────────────────────────────────────────────────────
+let invGuardadasActuales = null; // holds last calc result
+
+function guardarInversion() {
+  if (!invGuardadasActuales || !invGuardadasActuales.fv) {
+    alert('Primero calcula una inversión para poder guardarla'); return;
+  }
+  const nombre = prompt('Nombre para esta inversión:', getNombreTipo(inversionTipo));
+  if (!nombre) return;
+
+  if (!state.inversionesGuardadas) state.inversionesGuardadas = [];
+  const tipoLabels = { cdt: '📜 CDT', acciones: '📈 Acciones/ETFs', fondos: '🏛️ Fondo', negocio: '🏭 Negocio' };
+
+  const inv = {
+    id: uid(),
+    nombre,
+    tipo: tipoLabels[inversionTipo] || inversionTipo,
+    tipoKey: inversionTipo,
+    fecha: new Date().toLocaleDateString('es-CO'),
+    capital:   parseFloat(document.getElementById('inv-capital')?.value) || 0,
+    aportes:   parseFloat(document.getElementById('inv-aportes')?.value) || 0,
+    horizonte: parseInt(document.getElementById('inv-horizonte')?.value) || 36,
+    inflacion: parseFloat(document.getElementById('inv-inflacion')?.value) || 5.8,
+    impuestos: parseFloat(document.getElementById('inv-impuestos')?.value) || 19,
+    perfil:    document.getElementById('inv-perfil')?.value || 'moderado',
+    resultado: {
+      fv:       invGuardadasActuales.fv,
+      ganancia: invGuardadasActuales.ganancia,
+      roi:      invGuardadasActuales.roi,
+      tir:      invGuardadasActuales.tir,
+      van:      invGuardadasActuales.van,
+      tasaReal: invGuardadasActuales.tasaReal,
+      payback:  invGuardadasActuales.payback || null,
+      escenarios: invGuardadasActuales.escenarios || [],
+      filas:    invGuardadasActuales.filas || [],
+    },
+    // negocio extras
+    capexItems:    [...capexItems],
+    opexItems:     [...opexItems],
+    ingresosItems: [...ingresosItems],
+  };
+
+  state.inversionesGuardadas.push(inv);
+  saveState();
+  renderInvGuardadas();
+  alert(`✓ Inversión "${nombre}" guardada correctamente`);
+}
+
+function getNombreTipo(tipo) {
+  const n = { cdt:'CDT/Renta fija', acciones:'Acciones/ETFs', fondos:'Fondo de inversión', negocio:'Negocio/Activo productivo' };
+  return n[tipo] || tipo;
+}
+
+function eliminarInvGuardada(id) {
+  if (!confirm('¿Eliminar esta inversión guardada?')) return;
+  state.inversionesGuardadas = (state.inversionesGuardadas || []).filter(i => i.id !== id);
+  saveState(); renderInvGuardadas();
+}
+
+function renderInvGuardadas() {
+  if (!state.inversionesGuardadas) state.inversionesGuardadas = [];
+  const lista = document.getElementById('inv-guardadas-lista');
+  if (!lista) return;
+
+  if (!state.inversionesGuardadas.length) {
+    lista.innerHTML = '<div class="empty"><div class="empty-icon">💾</div><div class="empty-text">Guarda una simulación para verla aquí</div></div>';
+    return;
+  }
+
+  lista.innerHTML = '<div style="display:grid;gap:10px">' + state.inversionesGuardadas.map(inv => {
+    const r = inv.resultado;
+    const roiColor = r.roi >= 0 ? 'var(--green)' : 'var(--red)';
+    const realColor = r.tasaReal >= 0 ? 'var(--teal)' : 'var(--red)';
+    return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+        <div>
+          <div style="font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--text)">${inv.nombre}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${inv.tipo} · ${inv.fecha} · ${inv.horizonte} meses · Perfil ${inv.perfil}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="exportarInvGuardadaPDF('${inv.id}')">📄</button>
+          <button class="btn btn-danger btn-sm" onclick="eliminarInvGuardada('${inv.id}')">🗑</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        <div style="text-align:center;background:var(--bg4);border-radius:var(--r);padding:8px">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Valor futuro</div>
+          <div style="font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--green)">${fmt(r.fv)}</div>
+        </div>
+        <div style="text-align:center;background:var(--bg4);border-radius:var(--r);padding:8px">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:3px">ROI</div>
+          <div style="font-family:var(--font-head);font-size:13px;font-weight:700;color:${roiColor}">${fmtPct(r.roi)}</div>
+        </div>
+        <div style="text-align:center;background:var(--bg4);border-radius:var(--r);padding:8px">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:3px">TIR anual</div>
+          <div style="font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--amber)">${fmtPct(r.tir)}</div>
+        </div>
+        <div style="text-align:center;background:var(--bg4);border-radius:var(--r);padding:8px">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Tasa real</div>
+          <div style="font-family:var(--font-head);font-size:13px;font-weight:700;color:${realColor}">${fmtPct(r.tasaReal)}</div>
+        </div>
+      </div>
+      ${inv.tipoKey === 'negocio' && (inv.capexItems?.length || inv.opexItems?.length) ? `
+      <div style="margin-top:10px;font-size:11px;color:var(--text3);display:flex;gap:16px">
+        <span>CAPEX: <strong style="color:var(--red)">${fmt(inv.capexItems.reduce((s,i)=>s+(i.monto||0),0))}</strong></span>
+        <span>OPEX/mes: <strong style="color:var(--amber)">${fmt(inv.opexItems.reduce((s,i)=>s+(i.monto||0),0))}</strong></span>
+        <span>Ingresos/mes: <strong style="color:var(--green)">${fmt(inv.ingresosItems.reduce((s,i)=>s+(i.monto||0),0))}</strong></span>
+        ${r.payback ? `<span>Payback: <strong style="color:var(--teal)">${r.payback} meses</strong></span>` : ''}
+      </div>` : ''}
+    </div>`;
+  }).join('') + '</div>';
+}
+
+// ── PDF EXPORT ────────────────────────────────────────────────────────────────
+function buildPDFDoc(inv) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = 210, M = 14;
+  let y = 14;
+
+  // ── Header ─────────────────────────────────────────────────────────────────
+  doc.setFillColor(17, 21, 32);
+  doc.rect(0, 0, W, 28, 'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.text('FinanzasPro — Reporte de Inversión', M, 12);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.setTextColor(180,190,210);
+  doc.text(`${inv.nombre}  ·  ${inv.tipo}  ·  Generado: ${new Date().toLocaleDateString('es-CO')}`, M, 20);
+  y = 36;
+
+  // ── Parámetros ─────────────────────────────────────────────────────────────
+  doc.setTextColor(30,30,30);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.text('Parámetros de la inversión', M, y); y += 6;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  const params = [
+    ['Capital inicial', fmt(inv.capital)],
+    ['Aportes mensuales', fmt(inv.aportes)],
+    ['Horizonte', inv.horizonte + ' meses'],
+    ['Inflación anual', inv.inflacion + '%'],
+    ['Tasa impuestos', inv.impuestos + '%'],
+    ['Perfil de riesgo', inv.perfil],
+  ];
+  doc.autoTable({
+    startY: y, margin: { left: M, right: M },
+    head: [['Parámetro','Valor']],
+    body: params,
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [30,40,70], textColor: 255 },
+    alternateRowStyles: { fillColor: [245,247,252] },
+    columnStyles: { 0: { fontStyle:'bold' }, 1: { halign:'right' } }
+  });
+  y = doc.lastAutoTable.finalY + 8;
+
+  // ── Indicadores clave ──────────────────────────────────────────────────────
+  const r = inv.resultado;
+  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Indicadores financieros clave', M, y); y += 6;
+  const kpis = [
+    ['Valor futuro (FV)', fmt(r.fv)],
+    ['Ganancia total', fmt(r.ganancia)],
+    ['ROI', fmtPct(r.roi)],
+    ['Rentabilidad real (ajustada inflación)', fmtPct(r.tasaReal)],
+    ['VAN (Valor Actual Neto)', fmt(r.van)],
+    ['TIR anual', fmtPct(r.tir)],
+  ];
+  if (r.payback) kpis.push(['Payback', r.payback + ' meses']);
+  doc.autoTable({
+    startY: y, margin: { left: M, right: M },
+    head: [['Indicador','Resultado']],
+    body: kpis,
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [30,40,70], textColor: 255 },
+    alternateRowStyles: { fillColor: [245,247,252] },
+    columnStyles: { 0: { fontStyle:'bold' }, 1: { halign:'right' } }
+  });
+  y = doc.lastAutoTable.finalY + 8;
+
+  // ── Escenarios ─────────────────────────────────────────────────────────────
+  if (r.escenarios?.length) {
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Análisis de escenarios', M, y); y += 6;
+    doc.autoTable({
+      startY: y, margin: { left: M, right: M },
+      head: [['Escenario','Valor final proyectado']],
+      body: r.escenarios.map(sc => [sc.nombre.charAt(0).toUpperCase() + sc.nombre.slice(1), fmt(sc.final)]),
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [30,40,70], textColor: 255 },
+      alternateRowStyles: { fillColor: [245,247,252] },
+      columnStyles: { 1: { halign:'right' } }
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // ── CAPEX/OPEX si es negocio ───────────────────────────────────────────────
+  if (inv.tipoKey === 'negocio' && inv.capexItems?.length) {
+    if (y > 220) { doc.addPage(); y = 14; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Desglose CAPEX (Inversión inicial)', M, y); y += 6;
+    doc.autoTable({
+      startY: y, margin: { left: M, right: M },
+      head: [['Concepto','Monto']],
+      body: inv.capexItems.map(i => [i.nombre, fmt(i.monto)]),
+      foot: [['TOTAL CAPEX', fmt(inv.capexItems.reduce((s,i)=>s+(i.monto||0),0))]],
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [30,40,70], textColor: 255 },
+      footStyles: { fillColor: [220,230,245], fontStyle:'bold' },
+      columnStyles: { 1: { halign:'right' } }
+    });
+    y = doc.lastAutoTable.finalY + 6;
+
+    if (inv.opexItems?.length) {
+      doc.setFont('helvetica','bold'); doc.setFontSize(11);
+      doc.text('Desglose OPEX (Costos mensuales)', M, y); y += 6;
+      doc.autoTable({
+        startY: y, margin: { left: M, right: M },
+        head: [['Concepto','Monto/mes']],
+        body: inv.opexItems.map(i => [i.nombre, fmt(i.monto)]),
+        foot: [['TOTAL OPEX/MES', fmt(inv.opexItems.reduce((s,i)=>s+(i.monto||0),0))]],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [30,40,70], textColor: 255 },
+        footStyles: { fillColor: [220,230,245], fontStyle:'bold' },
+        columnStyles: { 1: { halign:'right' } }
+      });
+      y = doc.lastAutoTable.finalY + 6;
+    }
+
+    if (inv.ingresosItems?.length) {
+      doc.setFont('helvetica','bold'); doc.setFontSize(11);
+      doc.text('Fuentes de ingreso estimadas', M, y); y += 6;
+      doc.autoTable({
+        startY: y, margin: { left: M, right: M },
+        head: [['Concepto','Monto/mes']],
+        body: inv.ingresosItems.map(i => [i.nombre, fmt(i.monto)]),
+        foot: [['TOTAL INGRESOS/MES', fmt(inv.ingresosItems.reduce((s,i)=>s+(i.monto||0),0))]],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [30,40,70], textColor: 255 },
+        footStyles: { fillColor: [220,230,245], fontStyle:'bold' },
+        columnStyles: { 1: { halign:'right' } }
+      });
+      y = doc.lastAutoTable.finalY + 6;
+    }
+  }
+
+  // ── Tabla proyección (primeros 24 meses) ───────────────────────────────────
+  if (r.filas?.length) {
+    if (y > 200) { doc.addPage(); y = 14; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Proyección mensual (primeros 24 meses)', M, y); y += 6;
+    const filasPDF = r.filas.slice(0, 24).map(f => [
+      f.m, getMonthName(f.m), fmt(f.capital), fmt(f.rendimiento), fmt(f.acumulado), fmt(f.real)
+    ]);
+    doc.autoTable({
+      startY: y, margin: { left: M, right: M },
+      head: [['#','Mes','Capital','Rendimiento','Acumulado','Real (inflación)']],
+      body: filasPDF,
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      headStyles: { fillColor: [30,40,70], textColor: 255 },
+      alternateRowStyles: { fillColor: [245,247,252] },
+      columnStyles: { 2:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'}, 5:{halign:'right'} }
+    });
+  }
+
+  // ── Footer ─────────────────────────────────────────────────────────────────
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setFontSize(8); doc.setTextColor(160);
+    doc.text(`FinanzasPro · Reporte generado el ${new Date().toLocaleDateString('es-CO')} · Página ${p}/${pages}`, M, 290);
+  }
+  return doc;
+}
+
+function exportarInversionPDF() {
+  if (!invGuardadasActuales?.fv) { alert('Primero calcula una inversión'); return; }
+  const tipoLabels = { cdt: '📜 CDT', acciones: '📈 Acciones/ETFs', fondos: '🏛️ Fondo', negocio: '🏭 Negocio' };
+  const inv = {
+    id: 'temp', nombre: getNombreTipo(inversionTipo), tipo: tipoLabels[inversionTipo] || inversionTipo,
+    tipoKey: inversionTipo, fecha: new Date().toLocaleDateString('es-CO'),
+    capital:   parseFloat(document.getElementById('inv-capital')?.value) || 0,
+    aportes:   parseFloat(document.getElementById('inv-aportes')?.value) || 0,
+    horizonte: parseInt(document.getElementById('inv-horizonte')?.value) || 36,
+    inflacion: parseFloat(document.getElementById('inv-inflacion')?.value) || 5.8,
+    impuestos: parseFloat(document.getElementById('inv-impuestos')?.value) || 19,
+    perfil:    document.getElementById('inv-perfil')?.value || 'moderado',
+    resultado: invGuardadasActuales,
+    capexItems: [...capexItems], opexItems: [...opexItems], ingresosItems: [...ingresosItems],
+  };
+  const doc = buildPDFDoc(inv);
+  doc.save(`FinanzasPro_${inv.nombre.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+}
+
+function exportarInvGuardadaPDF(id) {
+  const inv = (state.inversionesGuardadas || []).find(i => i.id === id);
+  if (!inv) return;
+  const doc = buildPDFDoc(inv);
+  doc.save(`FinanzasPro_${inv.nombre.replace(/\s+/g,'_')}_${inv.fecha.replace(/\//g,'-')}.pdf`);
+}
+
+function exportarTodasPDF() {
+  const invs = state.inversionesGuardadas || [];
+  if (!invs.length) { alert('No hay inversiones guardadas'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  invs.forEach((inv, idx) => {
+    if (idx > 0) doc.addPage();
+    // Build each investment in same doc — simplified
+    const W = 210, M = 14;
+    doc.setFillColor(17, 21, 32);
+    doc.rect(0, 0, W, 22, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text(`${idx+1}. ${inv.nombre}`, M, 10);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(180,190,210);
+    doc.text(`${inv.tipo} · ${inv.fecha} · ${inv.horizonte} meses`, M, 18);
+    const r = inv.resultado;
+    const kpis = [['Valor futuro',fmt(r.fv)],['Ganancia',fmt(r.ganancia)],['ROI',fmtPct(r.roi)],['TIR',fmtPct(r.tir)],['VAN',fmt(r.van)],['Tasa real',fmtPct(r.tasaReal)]];
+    doc.setTextColor(30,30,30);
+    doc.autoTable({ startY: 28, margin:{left:M,right:M}, head:[['Indicador','Valor']], body: kpis, styles:{fontSize:9,cellPadding:3}, headStyles:{fillColor:[30,40,70],textColor:255}, columnStyles:{1:{halign:'right'}} });
+    if (r.escenarios?.length) {
+      doc.autoTable({ startY: doc.lastAutoTable.finalY+6, margin:{left:M,right:M}, head:[['Escenario','Proyección']], body: r.escenarios.map(sc=>[sc.nombre, fmt(sc.final)]), styles:{fontSize:9,cellPadding:3}, headStyles:{fillColor:[30,40,70],textColor:255}, columnStyles:{1:{halign:'right'}} });
+    }
+    doc.setFontSize(8); doc.setTextColor(160);
+    doc.text(`FinanzasPro · Página ${idx+1}/${invs.length}`, M, 290);
+  });
+  doc.save(`FinanzasPro_Inversiones_${new Date().toISOString().split('T')[0]}.pdf`);
+}
+function limpiarComparador() {
+  invComparador = [];
+  renderComparador();
+}
 // ============================
 function exportData() {
   exportCSV();
@@ -4030,6 +5318,7 @@ async function init() {
   if (!state.simulaciones) state.simulaciones = [];
   if (!state.metasAhorro) state.metasAhorro = [];
   if (!state.gastosFijosConfig) state.gastosFijosConfig = {};
+  if (!state.inversionesGuardadas) state.inversionesGuardadas = [];
 
   // Migrate old records without mes field to current month
   const _hoy = new Date();
