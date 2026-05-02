@@ -455,6 +455,26 @@
   .switch::after { content: ''; position: absolute; width: 14px; height: 14px; background: white; border-radius: 50%; top: 2px; left: 2px; transition: left .2s; }
   .switch.on::after { left: 18px; }
 
+  /* ESTADO PAGO GASTOS */
+  .pago-btn { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; border:none; cursor:pointer; font-size:11px; font-weight:600; font-family:var(--font-body); transition:all .2s; white-space:nowrap; }
+  .pago-btn.pendiente { background:rgba(251,191,36,0.15); color:var(--amber); border:1px solid rgba(251,191,36,0.3); }
+  .pago-btn.pendiente:hover { background:rgba(54,211,153,0.15); color:var(--green); border-color:rgba(54,211,153,0.3); }
+  .pago-btn.pagado { background:rgba(54,211,153,0.12); color:var(--green); border:1px solid rgba(54,211,153,0.25); }
+  .pago-btn.pagado:hover { background:rgba(255,107,107,0.1); color:var(--red); border-color:rgba(255,107,107,0.2); }
+  tr.pagado-row td { opacity:.55; }
+  tr.pagado-row td:nth-child(5) { opacity:1; }
+
+  /* BARRA RESUMEN MES */
+  .resumen-mes-bar { background:var(--bg3); border:1px solid var(--border); border-radius:var(--r2); padding:16px 20px; margin-bottom:16px; }
+  .resumen-mes-bar .rm-title { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.08em; margin-bottom:12px; font-weight:600; }
+  .resumen-mes-bar .rm-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:12px; }
+  .resumen-mes-bar .rm-item { text-align:center; }
+  .resumen-mes-bar .rm-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
+  .resumen-mes-bar .rm-val { font-family:var(--font-head); font-size:15px; font-weight:700; }
+  .resumen-progress { height:8px; background:var(--surface); border-radius:4px; overflow:hidden; position:relative; }
+  .resumen-progress-fill { height:100%; border-radius:4px; transition:width .5s; }
+  .resumen-progress-pagado { position:absolute; top:0; left:0; height:100%; border-radius:4px; background:rgba(54,211,153,0.5); transition:width .5s; }
+
   /* GASTOS FIJOS PLANTILLA */
   .fijos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 6px; }
   .fijo-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all .15s; position: relative; }
@@ -1254,12 +1274,22 @@
         <div style="font-size:11px;color:var(--text3);margin-top:8px">Marca los que aplican este mes, ajusta el monto y haz clic en "Aplicar". Puedes editar los montos directamente en cada tarjeta.</div>
       </div>
 
+      <!-- Barra resumen ingresos vs gastos del mes -->
+      <div class="resumen-mes-bar" id="resumen-mes-bar"></div>
+
       <div class="card">
-        <div class="card-title">Gastos del mes</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+          <div class="card-title" style="margin-bottom:0">Gastos del mes</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="marcarTodosPagados()">✓ Marcar todos pagados</button>
+            <button class="btn btn-ghost btn-sm" onclick="marcarTodosPendientes()">○ Todos pendientes</button>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
+                <th>Estado</th>
                 <th>Concepto</th>
                 <th>Categoría</th>
                 <th>Tipo</th>
@@ -1273,6 +1303,7 @@
               <tr><td colspan="6"><div class="empty"><div class="empty-icon">💸</div><div class="empty-text">Sin gastos en este mes</div></div></td></tr>
             </tbody>
           </table>
+        </div>
         </div>
       </div>
     </div>
@@ -2738,6 +2769,91 @@ function aplicarFijosAlMes() {
   alert(msg);
 }
 
+// ── Toggle estado pagado ───────────────────────────────────────────────────────
+function togglePagado(gastoId) {
+  const g = state.gastos.find(g => g.id === gastoId);
+  if (!g) return;
+  g.pagado = !g.pagado;
+  saveState();
+  renderGastos();
+  renderDashboard();
+}
+
+function marcarTodosPagados() {
+  const { y, m } = mesActivoGas;
+  gastosDelMes(y, m).forEach(g => { g.pagado = true; });
+  saveState(); renderGastos(); renderDashboard();
+}
+
+function marcarTodosPendientes() {
+  const { y, m } = mesActivoGas;
+  gastosDelMes(y, m).forEach(g => { g.pagado = false; });
+  saveState(); renderGastos(); renderDashboard();
+}
+
+// ── Barra resumen mes ──────────────────────────────────────────────────────────
+function renderResumenMes(lista, y, m) {
+  const el = document.getElementById('resumen-mes-bar');
+  if (!el) return;
+
+  const totalIng   = totalIngresosDelMes(y, m);
+  const totalGas   = lista.reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
+  const pagados    = lista.filter(g => g.pagado).reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
+  const pendientes = totalGas - pagados;
+  const balance    = totalIng - totalGas;
+  const pctGas     = totalIng > 0 ? Math.min(totalGas / totalIng * 100, 100) : 0;
+  const pctPag     = totalGas > 0 ? Math.min(pagados / totalGas * 100, 100) : 0;
+  const balColor   = balance >= 0 ? 'var(--green)' : 'var(--red)';
+  const gasColor   = pctGas > 90 ? 'var(--red)' : pctGas > 70 ? 'var(--amber)' : 'var(--green)';
+
+  el.innerHTML = `
+    <div class="rm-title">Resumen del mes — ${mesLabelStr(y, m)}</div>
+    <div class="rm-grid">
+      <div class="rm-item">
+        <div class="rm-label">Ingresos</div>
+        <div class="rm-val" style="color:var(--green)">${fmt(totalIng)}</div>
+      </div>
+      <div class="rm-item">
+        <div class="rm-label">Gastos totales</div>
+        <div class="rm-val" style="color:var(--red)">${fmt(totalGas)}</div>
+      </div>
+      <div class="rm-item">
+        <div class="rm-label">✓ Pagados</div>
+        <div class="rm-val" style="color:var(--teal)">${fmt(pagados)}</div>
+      </div>
+      <div class="rm-item">
+        <div class="rm-label">⏳ Pendientes</div>
+        <div class="rm-val" style="color:var(--amber)">${fmt(pendientes)}</div>
+      </div>
+      <div class="rm-item">
+        <div class="rm-label">Balance</div>
+        <div class="rm-val" style="color:${balColor}">${balance >= 0 ? '+' : ''}${fmt(balance)}</div>
+      </div>
+    </div>
+
+    <!-- Barra gastos vs ingresos -->
+    <div style="margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px">
+        <span>Gastos vs ingresos</span>
+        <span style="color:${gasColor};font-weight:600">${fmtDec(pctGas)}%</span>
+      </div>
+      <div class="resumen-progress">
+        <div class="resumen-progress-fill" style="width:${pctGas}%;background:${gasColor}"></div>
+      </div>
+    </div>
+
+    <!-- Barra pagado vs pendiente -->
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px">
+        <span>Pagado del total de gastos</span>
+        <span style="color:var(--teal);font-weight:600">${fmtDec(pctPag)}% pagado · ${lista.filter(g=>g.pagado).length}/${lista.length} gastos</span>
+      </div>
+      <div class="resumen-progress" style="background:rgba(251,191,36,0.15)">
+        <div class="resumen-progress-fill" style="width:${pctPag}%;background:var(--teal)"></div>
+      </div>
+    </div>`;
+}
+
 function renderGastos() {
   renderFijosGrid();
   const { y, m } = mesActivoGas;
@@ -2748,20 +2864,33 @@ function renderGastos() {
   const tbody = document.getElementById('gastos-tbody');
   const tipoBadge = { fijo: 'badge-blue', variable: 'badge-amber', discrecional: 'badge-pink' };
 
+  // Barra resumen siempre visible
+  renderResumenMes(lista, y, m);
+
   if (!lista.length) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="empty-icon">💸</div><div class="empty-text">Sin gastos en este mes — agrega uno o copia el mes anterior</div></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">💸</div><div class="empty-text">Sin gastos en este mes — agrega uno o copia el mes anterior</div></div></td></tr>';
     document.getElementById('gasto-metrics').innerHTML = '';
     return;
   }
 
   tbody.innerHTML = lista.map(g => {
-    const vInfo = vencimientoInfo(g.vencimiento);
-    const rowStyle = vInfo?.urgente ? 'background:rgba(255,107,107,0.04)' : '';
-    return `<tr style="${rowStyle}">
+    const vInfo    = vencimientoInfo(g.vencimiento);
+    const isPagado = !!g.pagado;
+    const rowStyle = isPagado
+      ? 'background:rgba(54,211,153,0.03)'
+      : vInfo?.urgente ? 'background:rgba(255,107,107,0.04)' : '';
+    return `<tr style="${rowStyle}" class="${isPagado ? 'pagado-row' : ''}">
+      <td>
+        <button class="pago-btn ${isPagado ? 'pagado' : 'pendiente'}" onclick="togglePagado('${g.id}')">
+          ${isPagado ? '✓ Pagado' : '⏳ Pendiente'}
+        </button>
+      </td>
       <td><strong style="color:var(--text)">${g.nombre}</strong></td>
       <td>${CAT_LABELS[g.categoria]||g.categoria}</td>
       <td><span class="badge ${tipoBadge[g.tipo]||'badge-gray'}">${g.tipo}</span></td>
-      <td class="neg">-${fmt(parseFloat(g.monto)||0)}</td>
+      <td class="${isPagado ? '' : 'neg'}" style="${isPagado ? 'color:var(--text3);text-decoration:line-through' : ''}">
+        -${fmt(parseFloat(g.monto)||0)}
+      </td>
       <td style="font-size:12px">
         ${vInfo
           ? `<span style="color:${vInfo.color};font-weight:500">${vInfo.icon} ${vInfo.texto}</span>`
@@ -2775,15 +2904,17 @@ function renderGastos() {
     </tr>`;
   }).join('');
 
-  const total = lista.reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
-  const fijos = lista.filter(g => g.tipo==='fijo').reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
-  const vars  = lista.filter(g => g.tipo==='variable').reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
-  const disc  = lista.filter(g => g.tipo==='discrecional').reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
+  const total    = lista.reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
+  const pagados  = lista.filter(g=>g.pagado).reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
+  const fijos    = lista.filter(g => g.tipo==='fijo').reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
+  const vars     = lista.filter(g => g.tipo==='variable').reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
+  const disc     = lista.filter(g => g.tipo==='discrecional').reduce((s, g) => s + (parseFloat(g.monto)||0), 0);
+
   document.getElementById('gasto-metrics').innerHTML = `
     <div class="metric-card red"><div class="metric-label">Total del mes</div><div class="metric-val red">${fmt(total)}</div><div class="metric-sub">${lista.length} registro(s)</div></div>
+    <div class="metric-card teal"><div class="metric-label">✓ Pagados</div><div class="metric-val teal">${fmt(pagados)}</div><div class="metric-sub">${lista.filter(g=>g.pagado).length} gasto(s)</div></div>
+    <div class="metric-card amber"><div class="metric-label">⏳ Pendientes</div><div class="metric-val amber">${fmt(total-pagados)}</div><div class="metric-sub">${lista.filter(g=>!g.pagado).length} gasto(s)</div></div>
     <div class="metric-card blue"><div class="metric-label">Fijos</div><div class="metric-val blue">${fmt(fijos)}</div><div class="metric-sub">${fmtDec(total?fijos/total*100:0)}%</div></div>
-    <div class="metric-card amber"><div class="metric-label">Variables</div><div class="metric-val amber">${fmt(vars)}</div><div class="metric-sub">${fmtDec(total?vars/total*100:0)}%</div></div>
-    <div class="metric-card teal"><div class="metric-label">Discrecionales</div><div class="metric-val teal">${fmt(disc)}</div><div class="metric-sub">${fmtDec(total?disc/total*100:0)}%</div></div>
   `;
   updateSidebar();
 }
